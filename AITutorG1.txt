@@ -1,0 +1,14 @@
+Che cosa ti danno i type hints con mypy strict in un progetto Python che cresce, e che cosa invece non ti garantiscono?
+Risposta: i type hints verificati con mypy --strict forniscono un sistema per rendere espliciti i contratti tra le parti del codice e verificare automaticamente che vengano rispettati, per quanto possibile, senza eseguire il programma.
+
+Quando useresti async def in un backend Python, e quando invece sarebbe inutile o persino dannoso rispetto a una funzione sincrona?
+Risposta: userei async def quando una richiesta deve aspettare operazioni di I/O e, durante quell'attesa, il server può fare altro lavoro utile. Non lo userei semplicemente perché il backend deve gestire molte richieste o perché una funzione sembra lenta.
+
+Qual è la differenza che conta davvero tra uv e pip nella gestione dell'ambiente e delle dipendenze di un progetto di squadra? Perché la scelta è importante per la collaborazione e la riproducibilità?
+Risposta: Risposta: pip installa pacchetti Python; uv può gestire l'intero flusso di lavoro delle dipendenze e dell'ambiente di un progetto, dalla risoluzione delle versioni alla creazione del virtual environment e alla sincronizzazione con il lockfile.
+
+Che cosa ti dà Pydantic Settings rispetto a leggere manualmente le variabili d'ambiente con os.getenv()? Perché sceglieresti questa soluzione in un progetto backend destinato a crescere?
+per un backend piccolo, os.getenv() è assolutamente ragionevole. Quando però aumentano le integrazioni, gli ambienti e le persone che lavorano sul progetto, sceglierei Pydantic Settings perché trasforma la configurazione da insieme di stringhe sparse a un'interfaccia tipizzata, validata e verificabile all'avvio.
+
+Come spieghi i vantaggi concreti della scelta e in quali circostanze Flask potrebbe essere comunque preferibile?
+Risposta: i vantaggi concreti di FastAPI rispetto a Flask sono soprattutto la validazione dei dati, i contratti tipizzati e la documentazione automatica.
