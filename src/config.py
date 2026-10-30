@@ -1,9 +1,10 @@
 # src/config.py
+import re
 import sys
 from typing import Literal
 
 from pydantic import Field, ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, SettingsError
 
 
 class Settings(BaseSettings):
@@ -41,6 +42,8 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     max_tokens_per_request: int = 2000
 
+    cors_origins: list[str] = ["http://localhost:5173"]
+
 
 def spiega(errore: ValidationError) -> str:
     """Traduce gli errori di configurazione in messaggi leggibili."""
@@ -68,6 +71,15 @@ def carica() -> Settings:
         return Settings()
     except ValidationError as e:
         sys.exit(spiega(e))
+    except SettingsError as e:
+        # dal Giorno 2: un valore che non si riesce nemmeno a leggere, come una lista senza JSON
+        trovato = re.search(r'field "(\w+)"', str(e))
+        nome = trovato.group(1).upper() if trovato else "una variabile"
+        sys.exit(
+            "Configurazione non valida: il progetto non parte.\n"
+            f"  - {nome}: valore non leggibile. Una lista si scrive in JSON, per esempio "
+            '["http://localhost:5173"].'
+        )
 
 
 settings = carica()
