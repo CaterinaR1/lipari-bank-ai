@@ -36,7 +36,7 @@ GET /health: mostra l'ambiente e lo stato della configurazione delle credenziali
 Controlli
 bash
 uv run ruff check .
-uv run mypy src
+uv run mypy src scripts
 uv run pytest
 
 Ricostruzione da zero
@@ -102,3 +102,102 @@ Lo so da un test che fa fallire l'aggiornamento del saldo e verifica che il movi
 ## Importi con tre decimali
 Si rifiutano con un 422. Ho scartato l'arrotondamento in silenzio di Numeric(12, 2): 12.345
 diventerebbe 12.35 senza che nessuno lo sappia.
+
+## Giorno 4 — come si lancia
+```bash
+docker compose up -d
+uv run alembic upgrade head
+uv run python -m scripts.seed_accounts
+uv run uvicorn src.main:app --reload
+uv run ruff check . && uv run mypy src scripts && uv run pytest
+```
+Nel `.env` servono `OPENAI_API_KEY`, `OPENAI_BASE_URL` e `DEFAULT_MODEL`.
+- Groq (tier gratuito): `OPENAI_BASE_URL=https://api.groq.com/openai/v1`,
+  `DEFAULT_MODEL=openai/gpt-oss-120b`.
+- OpenRouter (modello `:free`, nessun acquisto): `OPENAI_BASE_URL=https://openrouter.ai/api/v1`,
+  `DEFAULT_MODEL=dots-studio/dots-3-note-preview:free`.
+- Anthropic: `ANTHROPIC_API_KEY` e `DEFAULT_MODEL=claude-haiku-4-5-20251001` (richiede una chiave
+  a pagamento).
+
+## Il fornitore si cambia da una variabile
+`DEFAULT_MODEL` decide il fornitore nella factory (`src/llm/factory.py`): prefisso `claude` →
+Anthropic, tutto il resto → OpenAI (o un endpoint compatibile indicato da `OPENAI_BASE_URL`).
+Service, endpoint e tipi non cambiano.
+
+OpenAI ↔ Anthropic: cambia solo `DEFAULT_MODEL`, perché entrambe le chiavi stanno nel `.env`.
+Groq ↔ OpenRouter: sono due endpoint dello stesso SDK OpenAI, quindi cambiano `DEFAULT_MODEL`,
+`OPENAI_BASE_URL` e `OPENAI_API_KEY`; il codice resta lo stesso. La prova del contratto fra due
+implementazioni diverse del `Protocol` è nei test; la demo live gratuita usa Groq ↔ OpenRouter
+perché Anthropic richiede una chiave a pagamento.
+
+## L'output strutturato resta sull'SDK di OpenAI
+La categorizzazione usa `instructor.from_openai(...)` (`src/llm/factory.py`): anche quando la chat
+parla con Anthropic, l'output strutturato passa dall'SDK di OpenAI. Non ci sono due strade da
+mantenere per lo stesso schema.
+
+## Dove si conta il costo
+Lo calcola il provider, che è l'unico a vedere i token consumati; il service somma i giri della
+tool-call e salva una riga per risposta; il `CostTracker` legge la somma del giorno e la confronta
+col tetto. Tengo questa divisione perché ogni pezzo fa una cosa sola e il tetto non deve fidarsi
+del chiamante.
+
+Il prezzo è quello di listino, non il tier gratuito: Groq `gpt-oss-120b` costa 0,00014/0,00056 EUR
+per 1000 token e OpenRouter `:free` costa 0. Così il tetto conta quello che il fornitore
+chiederebbe davvero e la demo mostra due costi diversi; con entrambi a zero il tetto non
+scatterebbe mai.
+
+## Estensione scelta: lo streaming sopravvive all'interruzione
+Se il client chiude a metà, salvo il testo parziale già inviato e il suo costo stimato (~4
+caratteri per token, dichiarato come stima) così il tetto non si aggira chiudendo la pagina. Ho
+scartato di non salvare nulla perché avrebbe permesso di spendere senza contare. Lo so da un test:
+20 interruzioni su 20 lasciano 20 righe assistant con `cost_eur > 0`.
+```bash
+uv run pytest "tests/test_g4.py::test_stream_interrotto_salva_parziale_e_costo_su_venti_su_venti" -q
+```
+
+## Le quattro prove di quello che non deve accadere
+```bash
+# 1. conto di un altro portafoglio: rifiuta lo strumento, e il log dice strumento_negato
+uv run pytest "tests/test_g4.py::test_il_conto_di_un_altro_portafoglio_lo_rifiuta_lo_strumento" -q
+# 2. tetto a zero: 429 pulito, il modello non viene chiamato
+uv run pytest "tests/test_g4.py::test_il_tetto_a_zero_rifiuta_prima_di_chiamare_il_modello" -q
+# 3. output fuori schema: Instructor ritenta e poi 502, niente spazzatura salvata
+uv run pytest "tests/test_g4.py::test_instructor_ritenta_e_ogni_tentativo_e_una_chiamata" -q
+# 4. streaming interrotto: parziale e costo stimato restano nel database (20/20)
+uv run pytest "tests/test_g4.py::test_stream_interrotto_salva_parziale_e_costo_su_venti_su_venti" -q
+```
+
+## Demo di due minuti
+Avvia i due fornitori sullo stesso database. Il primo legge Groq dal `.env`; il secondo
+sovrascrive endpoint, chiave e modello nel proprio terminale (PowerShell):
+```powershell
+# terminale 1 — Groq, costo a listino
+$env:DEFAULT_MODEL="openai/gpt-oss-120b"; uv run uvicorn src.main:app --port 8000
+
+# terminale 2 — OpenRouter, modello :free (chiave sk-or-v1-...)
+$env:OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+$env:OPENAI_API_KEY="sk-or-v1-..."
+$env:DEFAULT_MODEL="dots-studio/dots-3-note-preview:free"
+uv run uvicorn src.main:app --port 8001
+```
+Poi, a parità di domanda:
+```bash
+curl -s -X POST localhost:8000/api/ai/chat -H "Content-Type: application/json" \
+  -d '{"session_id":"new","message":"Quanto c e sul conto IT60X0542811101000000123?"}'
+curl -s -X POST localhost:8001/api/ai/chat -H "Content-Type: application/json" \
+  -d '{"session_id":"new","message":"Quanto c e sul conto IT60X0542811101000000123?"}'
+```
+I due `cost_eur` sono diversi perché i listini sono diversi; la forma della risposta e il percorso
+sono gli stessi. Poi il tentativo sul conto di Anna Greco (`IT60X0542811101000000789`): risponde
+lo strumento con un errore, e nel log compare `strumento_negato`. Per il 429 basta avviare con
+`$env:DAILY_BUDGET_EUR="0"` e rifare una domanda.
+
+La prova una-variabile OpenAI ↔ Anthropic resta la stessa: nel secondo terminale basta
+`$env:DEFAULT_MODEL="claude-haiku-4-5-20251001"` e `ANTHROPIC_API_KEY` nel `.env`. Non l'ho
+eseguita live perché la chiave Anthropic richiede un acquisto; la copre il test con le HTTP finte.
+
+Il tier free di OpenRouter è limitato a 20 richieste al minuto e 50 al giorno senza crediti: basta
+per questa demo, non per un uso reale. Alcuni modelli `:free` hanno anche un limite upstream: se
+rispondono 429, cambia modello (per esempio `dots-studio/dots-3-note-preview:free` oppure
+`openrouter/free`). I modelli `:free` possono usare i prompt per il training: usa solo i dati finti
+del seed, mai dati reali di clienti.

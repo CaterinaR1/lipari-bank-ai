@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -49,8 +49,12 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(16))  # "user" oppure "assistant"
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=adesso)
-
     session: Mapped[ChatSession] = relationship(back_populates="messages")
+    tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cost_eur: Mapped[Decimal] = mapped_column(
+        Numeric(10, 6), default=Decimal("0"), server_default="0"
+    )  # sei decimali: un messaggio costa frazioni di centesimo
+    model_used: Mapped[str | None] = mapped_column(String(64), default=None)
 
 
 class Customer(Base):

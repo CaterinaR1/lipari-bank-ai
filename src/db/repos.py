@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select, update
@@ -27,11 +27,35 @@ class ChatRepository:
         )
         return await self.session.scalar(stmt)
 
-    async def add_message(self, session_id: str, role: str, content: str) -> ChatMessage:
-        messaggio = ChatMessage(session_id=session_id, role=role, content=content)
+    async def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        tokens: int = 0,
+        cost_eur: Decimal = Decimal("0"),
+        model_used: str | None = None,
+    ) -> ChatMessage:
+        messaggio = ChatMessage(
+            session_id=session_id,
+            role=role,
+            content=content,
+            tokens=tokens,
+            cost_eur=cost_eur,
+            model_used=model_used,
+        )
         self.session.add(messaggio)
         await self.session.flush()
         return messaggio
+
+    async def cost_between(self, inizio: datetime, fine: datetime) -> Decimal:
+        """Quanto sono costati i messaggi scritti in un intervallo: la somma, o zero."""
+        speso = await self.session.scalar(
+            select(func.coalesce(func.sum(ChatMessage.cost_eur), 0)).where(
+                ChatMessage.created_at >= inizio, ChatMessage.created_at < fine
+            )
+        )
+        return Decimal(speso or 0)
 
 class AccountRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -65,6 +89,15 @@ class AccountRepository:
         )
         nuovo: Decimal = (await self.session.execute(stmt)).scalar_one()
         return nuovo
+
+    async def ids_in_portfolio(self, username: str) -> set[str]:
+        """Gli IBAN dei conti dei clienti nel portafoglio di questo operatore."""
+        stmt = (
+            select(Account.id)
+            .join(Customer, Customer.id == Account.customer_id)
+            .where(Customer.operator == username)
+        )
+        return set((await self.session.scalars(stmt)).all())
 
 
 class MovementRepository:

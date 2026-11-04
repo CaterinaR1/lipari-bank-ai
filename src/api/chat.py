@@ -1,26 +1,52 @@
-# src/api/chat.py — la chat, con la memoria
+# src/api/chat.py — la chat, con il modello, intera o in streaming
+import json
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.services.chat_service import ChatService
 
+from src.config import settings
 from src.db.session import get_db
+from src.llm.client import LLMProvider
+from src.llm.factory import get_llm_provider
+from src.llm.prompt import load_prompt
+from src.services.chat_service import ChatService
 from src.types.chat import ChatRequest, ChatResponse
 
 router = APIRouter(prefix="/api/ai", tags=["Chat"])
 
-# L'utente è finto: dal Giorno 6 arriva dal token, e questa riga cambia
-UTENTE = "mbianchi"
+SYSTEM_PROMPT = load_prompt("chat_system_v1")
+OPERATORE = "mbianchi"  # finto: l'operatore del seed, finché non arriva l'autenticazione
 
 
-@router.post(
-    "/chat",
-    response_model=ChatResponse,
-    summary="Manda un messaggio all'assistente",
-        description="Conversazione a più turni, salvata nel database. «new» ne apre una."
-)
+def get_chat_service(
+    session: Annotated[AsyncSession, Depends(get_db)],
+    llm: Annotated[LLMProvider, Depends(get_llm_provider)],
+) -> ChatService:
+    return ChatService(
+        session, llm, SYSTEM_PROMPT, settings.daily_budget_eur, settings.default_model
+    )
+
+
+@router.post("/chat", response_model=ChatResponse)
 async def chat(
-    req: ChatRequest, session: Annotated[AsyncSession, Depends(get_db)]
+    req: ChatRequest, service: Annotated[ChatService, Depends(get_chat_service)]
 ) -> ChatResponse:
-    return await ChatService(session).reply(UTENTE, req.session_id, req.message)
+    return await service.chat(req, user_id=OPERATORE)
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    req: ChatRequest, service: Annotated[ChatService, Depends(get_chat_service)]
+) -> StreamingResponse:
+    pezzi = await service.chat_stream(req, user_id=OPERATORE)  # un 404 esce qui, prima dello stream
+
+    async def eventi() -> AsyncIterator[str]:
+        async for pezzo in pezzi:
+            # ogni evento è JSON: un a capo dentro il testo non rompe il formato
+            yield f"data: {json.dumps({'text': pezzo}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(eventi(), media_type="text/event-stream")
