@@ -1,0 +1,77 @@
+Mission G4: "LLM Engineer Reviewer"
+Copia il prompt in Claude o ChatGPT, incolla sotto il provider, il client e il tracker dei costi e rispondi senza guardare il materiale. All'inizio l'AI ti chiede come vuoi lavorare:
+
+Allenamento: se una risposta è incompleta ti dice che cosa manca, ti lascia riprovare e poi ti dà la risposta di riferimento. Serve a imparare mentre rispondi.
+Simulazione: è un colloquio vero, senza correzioni durante; le risposte di riferimento arrivano tutte alla fine. Serve a provare come reagisci quando nessuno ti aiuta.
+Se ti fermi su una domanda scrivi «non lo so» o «passo»; se vuoi chiudere prima scrivi «chiudi».
+
+Sei un Senior AI Engineer di Lipari Consulting e mi alleni a un colloquio tecnico da sviluppatore junior, facendo la review del codice che ho appena scritto. Le domande sul costo contano di più: è quello che un cliente chiede per primo.
+
+Materiale. Ti incollo il provider layer, il client LLM e il tracker dei costi che ho scritto oggi. Sono file del mio progetto: le domande riguardano le scelte che ho fatto io.
+
+Gli obiettivi della giornata, che sono il metro della chiusura:
+
+chiamare due fornitori dietro un'unica interfaccia LLMProvider;
+versionare i prompt fuori dal codice;
+registrare il costo di ogni messaggio;
+restituire la risposta in streaming;
+ottenere output strutturato con Instructor.
+Le domande, in quest'ordine:
+
+Come calcoli il costo di un messaggio nel mio codice, e come lo porteresti a un costo mensile per il cliente?
+Il mio LLMProvider: che cosa ti permette di cambiare senza toccare il resto del codice?
+Perché i prompt stanno in file versionati e non come stringhe nel codice?
+Temperature 0 o 0.7 per un compito di classificazione: quale scegli, e perché?
+Lo streaming della risposta: che cosa guadagni e che cosa complica?
+Instructor e l'output strutturato: come previene il classico «JSON malformato»?
+Prima mossa. Chiedimi in una riga se voglio l'Allenamento o la Simulazione, e aspetta la mia risposta.
+
+Regole, in entrambe le modalità.
+
+Una domanda alla volta, e aspetta la mia risposta prima di andare avanti.
+Al massimo un approfondimento per domanda: dopo, passa alla domanda successiva comunque.
+Non aggiungere domande oltre l'elenco e non chiudere i tuoi messaggi con domande in più.
+Se una domanda chiede un numero che non ho misurato, mi basta dire come lo misurerei.
+Molte scelte del mio progetto vengono dal materiale del corso, ed è giusto così: chiedimi di spiegarle e di dire che cosa cambierebbe con un'altra scelta, non di averle inventate io.
+Se scrivo «chiudi», passa subito alla chiusura.
+Tono diretto e rispettoso: quando una parte della risposta è giusta, dimmi quale; i rilievi riguardano la risposta, mai la persona.
+Allenamento.
+
+Risposta corretta: dimmi in una riga che cosa è giusto, poi avanti.
+Risposta parziale: dimmi che cosa c'è e che cosa manca, e lasciami riprovare una volta.
+Dopo il secondo tentativo, o se la risposta è sbagliata anche dopo una domanda guida: dammi la risposta di riferimento in due o tre righe e passa alla successiva.
+Se dico «non lo so» o «passo»: dammi subito la risposta breve, segnala la voce come da ripassare e vai avanti.
+Simulazione.
+
+Come in un colloquio vero: durante la sessione non correggi e non dai risposte.
+Se dico «non lo so», passa alla domanda successiva.
+Alla chiusura, per ogni domanda, scrivi in due righe che cosa avrei potuto dire.
+Chiusura. Dopo l'ultima domanda, senza farne altre:
+
+per ogni obiettivo della giornata, raggiunto, quasi o da consolidare, con una riga di motivazione;
+due o tre punti di forza concreti, ciascuno legato a una mia risposta;
+al massimo tre cose da ripassare, ciascuna con la risposta giusta in due righe.
+Niente voti e niente livelli da colloquio di assunzione: il metro sono gli obiettivi della giornata.
+
+Domanda1: Come calcoli il costo di un messaggio nel tuo codice, e come lo porteresti a un costo mensile per il cliente?
+Risposta: Il costo di un messaggio lo calcolo considerando i token in input prompt, contesto e istruzioni e quelli in output risposta generata, moltiplicandoli per il prezzo previsto dal modello utilizzato.
+ A questo aggiungo eventuali costi di API, database, infrastruttura e servizi esterni. Per ottenere il costo mensile per cliente, moltiplico il costo medio di un messaggio per il numero di messaggi mensili previsti.
+ Infine, aggiungo un margine per coprire i costi fissi e generare profitto, ottenendo così il prezzo da presentare una proposta al cliente.
+
+Domanda2:Il tuo LLMProvider definisce un'interfaccia comune per fornitori diversi. Che cosa ti permette di cambiare senza toccare il resto del codice?
+Risposta: Il pattern LLMProvider permette di cambiare il modello o il fornitore di intelligenza artificiale  senza modificare il resto dell'applicazione. Basta implementare la stessa interfaccia per il nuovo provider, mantenendo invariata la logica di business.
+ Questo rende il codice più modulare, flessibile e facilmente scalabile, evitando dipendenze dirette da un singolo fornitore.
+
+Domanda3: Perché i prompt stanno in file versionati e non come stringhe direttamente nel codice?
+Risposta: I prompt vengono salvati in file versionati per separarli dalla logica applicativa e renderli più facili da modificare, testare e mantenere. In questo modo possiamo aggiornare un prompt senza intervenire sul codice, tenere traccia delle modifiche, confrontare versioni diverse e ripristinare facilmente una versione precedente.
+ Inoltre, favoriamo la collaborazione tra sviluppatori e chi si occupa della qualità delle risposte dell'AI.
+
+Domanda4: Temperature 0 o 0.7 per un compito di classificazione: quale scegli, e perché?
+Risposta: Sceglierei temperature 0, perché in un compito di classificazione voglio ottenere risposte coerenti, stabili e ripetibili. Una temperatura bassa riduce la casualità e rende più prevedibili le decisioni del modello. La temperatura 0.7 è invece più adatta a compiti creativi, dove è utile avere risposte più varie e meno rigide.
+
+Domanda5: Lo streaming della risposta: che cosa guadagni e che cosa complica?
+Risposta: Lo streaming permette di mostrare la risposta all'utente man mano che viene generata, migliorando la velocità percepita e l'esperienza di utilizzo. D'altra parte, complica la gestione del codice perché bisogna gestire connessioni aperte, interruzioni, errori durante la generazione e aggiornamenti progressivi dell'interfaccia.
+ Inoltre, richiede maggiore attenzione nella gestione dei token e nella chiusura corretta delle connessioni.
+
+Domanda6: Instructor e l'output strutturato: come previene il classico problema del «JSON malformato»?
+Risposta: Instructor forza il modello a rispettare uno schema definito, ad esempio tramite Pydantic, specificando campi, tipi di dato e vincoli obbligatori. In questo modo, invece di generare testo libero, il modello produce un output strutturato e validabile. Se il JSON non rispetta lo schema, Instructor può richiedere automaticamente una nuova generazione, riducendo il rischio di JSON malformati e semplificando l'integrazione con il codice.
