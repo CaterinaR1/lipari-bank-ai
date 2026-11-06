@@ -5,7 +5,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.db.models import Account, ChatMessage, ChatSession, Customer, Movement
+from src.db.models import Account, ChatMessage, ChatSession, CostEvent, Customer, Movement
 
 
 class ChatRepository:
@@ -48,14 +48,38 @@ class ChatRepository:
         await self.session.flush()
         return messaggio
 
+    async def add_cost(
+        self,
+        source: str,
+        tokens: int,
+        cost_eur: Decimal,
+        model_used: str | None = None,
+    ) -> CostEvent:
+        """La spesa che non è un messaggio di chat, per esempio una risposta dell'advisor."""
+        evento = CostEvent(
+            source=source,
+            tokens=tokens,
+            cost_eur=cost_eur,
+            model_used=model_used,
+        )
+        self.session.add(evento)
+        await self.session.flush()
+        return evento
+
     async def cost_between(self, inizio: datetime, fine: datetime) -> Decimal:
-        """Quanto sono costati i messaggi scritti in un intervallo: la somma, o zero."""
-        speso = await self.session.scalar(
+        """Quanto è stato speso in un intervallo: messaggi di chat più gli altri eventi."""
+        chat = await self.session.scalar(
             select(func.coalesce(func.sum(ChatMessage.cost_eur), 0)).where(
                 ChatMessage.created_at >= inizio, ChatMessage.created_at < fine
             )
         )
-        return Decimal(speso or 0)
+        eventi = await self.session.scalar(
+            select(func.coalesce(func.sum(CostEvent.cost_eur), 0)).where(
+                CostEvent.created_at >= inizio, CostEvent.created_at < fine
+            )
+        )
+        return Decimal(chat or 0) + Decimal(eventi or 0)
+
 
 class AccountRepository:
     def __init__(self, session: AsyncSession) -> None:

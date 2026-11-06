@@ -31,11 +31,12 @@ def modelli_finti() -> Iterator[None]:
     diverso. La chat parla con un finto che ripete la domanda, la categorizzazione usa la regola
     a parole chiave. Un test che vuole un modello preciso mette il suo."""
     from src.api.categorize import get_categorize_service
-    from src.llm.factory import get_llm_provider
+    from src.llm.factory import get_embedder, get_llm_provider
     from src.main import app
-    from tests.finti import CategorizzazioneARegole, ModelloEco
+    from tests.finti import CategorizzazioneARegole, ModelloEco, embedder_finto
 
     app.dependency_overrides[get_llm_provider] = ModelloEco
     app.dependency_overrides[get_categorize_service] = CategorizzazioneARegole
+    app.dependency_overrides[get_embedder] = embedder_finto
     yield
     app.dependency_overrides.clear()

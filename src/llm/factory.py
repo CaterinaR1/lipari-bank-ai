@@ -9,6 +9,8 @@ from src.config import settings
 from src.exceptions import AppError
 from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.client import LLMProvider
+from src.llm.embedding_client import Embedder, EmbeddingClient
+from src.llm.local_embedding_client import LocalEmbeddingClient
 from src.llm.openai_provider import OpenAIProvider
 
 
@@ -55,3 +57,20 @@ def get_openai() -> AsyncOpenAI:
 @cache
 def get_instructor() -> instructor.AsyncInstructor:
     return instructor.from_openai(_openai())
+
+
+@cache
+def _openai_embedding() -> AsyncOpenAI:
+    # sempre api.openai.com: gli embedding non passano dall'endpoint compatibile della chat
+    return AsyncOpenAI(
+        api_key=_chiave(settings.embedding_api_key, "EMBEDDING_API_KEY"),
+        timeout=20.0,
+        max_retries=2,
+    )
+
+
+def get_embedder() -> Embedder:
+    # lo stesso modello per i documenti e per le domande: è la regola che non si viola
+    if settings.embedding_backend == "local":
+        return LocalEmbeddingClient(settings.embedding_model, settings.embedding_dim)
+    return EmbeddingClient(_openai_embedding(), settings.embedding_model)

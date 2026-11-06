@@ -1,0 +1,20 @@
+{"id": "p01", "question": "PRCEST07", "gold_document": "circolare_limiti_estero", "gold_phrase": "PRCEST07", "answerable": true}
+{"id": "p02", "question": "MODEST50", "gold_document": "circolare_limiti_estero", "gold_phrase": "MODEST50", "answerable": true}
+{"id": "p03", "question": "Lista GRUPPO-A", "gold_document": "circolare_limiti_estero", "gold_phrase": "GRUPPO-A", "answerable": true}
+{"id": "p04", "question": "CIRS10", "gold_document": "circolare_clienti_storici", "gold_phrase": "CIRS10", "answerable": true}
+{"id": "p05", "question": "PRCAGEV10", "gold_document": "circolare_clienti_storici", "gold_phrase": "PRCAGEV10", "answerable": true}
+{"id": "p06", "question": "PRCSEGN14", "gold_document": "circolare_segnalazioni", "gold_phrase": "PRCSEGN14", "answerable": true}
+{"id": "p07", "question": "MODSEGN14", "gold_document": "circolare_segnalazioni", "gold_phrase": "MODSEGN14", "answerable": true}
+{"id": "p08", "question": "A cosa serve la MODEST50?", "gold_document": "circolare_limiti_estero", "gold_phrase": "MODEST50", "answerable": true}
+{"id": "p09", "question": "A cosa serve la PRCAGEV10?", "gold_document": "circolare_clienti_storici", "gold_phrase": "PRCAGEV10", "answerable": true}
+{"id": "p10", "question": "Dove trovo la Lista GRUPPO-A?", "gold_document": "circolare_limiti_estero", "gold_phrase": "GRUPPO-A", "answerable": true}
+{"id": "n01", "question": "15.000 EUR", "gold_document": "circolare_limiti_estero", "gold_phrase": "15.000 EUR", "answerable": true}
+{"id": "n02", "question": "50.000 EUR", "gold_document": "circolare_limiti_estero", "gold_phrase": "50.000 EUR", "answerable": true}
+{"id": "n03", "question": "100.000 EUR", "gold_document": "circolare_limiti_estero", "gold_phrase": "100.000 EUR", "answerable": true}
+{"id": "n04", "question": "30 EUR", "gold_document": "circolare_clienti_storici", "gold_phrase": "30 EUR", "answerable": true}
+{"id": "n05", "question": "€5.000", "gold_document": "condizioni_carta_credito", "gold_phrase": "€5.000", "answerable": true}
+{"id": "n06", "question": "€4.00", "gold_document": "regolamento_conti", "gold_phrase": "€4.00", "answerable": true}
+{"id": "n07", "question": "€1.00", "gold_document": "commissioni_bonifico", "gold_phrase": "€1.00", "answerable": true}
+{"id": "n08", "question": "24 ore", "gold_document": "circolare_segnalazioni", "gold_phrase": "24 ore", "answerable": true}
+{"id": "n09", "question": "10.000 EUR", "gold_document": "circolare_segnalazioni", "gold_phrase": "10.000 EUR", "answerable": true}
+{"id": "n10", "question": "0,20%", "gold_document": "circolare_limiti_estero", "gold_phrase": "0,20%", "answerable": true}

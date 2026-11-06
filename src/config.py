@@ -33,9 +33,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""  # vuoto = OpenAI ufficiale; valorizzato = endpoint compatibile
     anthropic_api_key: str = ""
+    # gli embedding: locali per default, o l'API OpenAI se il backend lo dice
+    embedding_backend: Literal["local", "openai"] = "local"
+    embedding_api_key: str = ""
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_dim: int = 384
+    retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
 
     default_model: str = "gpt-4o-mini"
-    embedding_model: str = "text-embedding-3-small"
     max_tokens_per_request: int = 2000
     cors_origins: list[str] = ["http://localhost:5173"]
     daily_budget_eur: Decimal = Decimal("5.00")  # il tetto di spesa del modello, al giorno

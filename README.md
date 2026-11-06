@@ -201,3 +201,152 @@ per questa demo, non per un uso reale. Alcuni modelli `:free` hanno anche un lim
 rispondono 429, cambia modello (per esempio `dots-studio/dots-3-note-preview:free` oppure
 `openrouter/free`). I modelli `:free` possono usare i prompt per il training: usa solo i dati finti
 del seed, mai dati reali di clienti.
+
+## Giorno 5 — come si lancia
+```bash
+docker compose up -d                         # Postgres 16 con pgvector
+uv run alembic upgrade head                  # chunk a 384 dimensioni, cost_events, GIN
+uv run python -m scripts.ingest_docs         # data/docs/*.md, diretto sul database
+uv run uvicorn src.main:app --reload         # API su http://localhost:8000
+uv run python -m scripts.prove_g5            # le quattro prove live
+uv run python -m scripts.valuta_retrieval --mode vector
+uv run python -m scripts.valuta_retrieval --mode hybrid
+uv run ruff check . && uv run mypy src scripts && uv run pytest
+```
+L'ingestione non passa più dagli endpoint: `scripts/ingest_docs.py` apre la sessione e usa lo
+stesso `IngestService`, quindi il server non serve per popolare l'indice. Gli embedding sono
+locali (`EMBEDDING_BACKEND=local`, `intfloat/multilingual-e5-small`, 384 dimensioni): al primo uso
+fastembed scarica il modello ONNX, poi resta nella cache. Non serve `EMBEDDING_API_KEY`; il
+percorso OpenAI resta disponibile con `EMBEDDING_BACKEND=openai` e una chiave vera. Per i test
+serve il database di prova:
+`docker compose exec postgres createdb -U lipari lipari_ai_test`.
+
+Le domande si fanno così, una volta che il corpus è nell'indice:
+```bash
+curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json" \
+  -d '{"question":"Quanto costa il bonifico istantaneo SEPA?"}'
+```
+
+## Le scelte del RAG
+- **384 dimensioni locali**: `intfloat/multilingual-e5-small`, lo stesso modello per i documenti
+  (`passage:`) e per la domanda (`query:`). I prefissi sono la convenzione di E5: senza, i due lati
+  non sono addestrati a stare vicini. Ho scelto un modello locale perché non costa a chiamata,
+  lascia i documenti dentro la macchina ed è deterministico nei test; pago il download del modello
+  ONNX, l'uso di CPU e un tetto di qualità più basso di un modello API grande.
+- **Chunk da 500 caratteri, sovrapposizione 50**: 500 tengono un concetto intero senza portarsi
+  dietro mezzo documento; 50 evitano di perdere una frase che cade sul confine. Il taglio cerca
+  prima `. `, `? `, `! ` e `\n\n` dopo metà finestra, e solo se non li trova taglia a 500. Prima
+  del taglio tolgo i paragrafi identici (una pagina incollata due volte), perché con l'overlap le
+  copie non sarebbero mai chunk uguali. Chunk più piccoli sono più precisi ma perdono contesto e
+  fanno più chiamate; chunk più grandi mescolano più argomenti e il top-k porta rumore.
+- **HNSW con coseno**: indice `vector_cosine_ops`, top-k 5, soglia 0.85. HNSW guadagna velocità
+  (non confronta la domanda con tutti i vettori) e paga RAM, spazio, tempo di costruzione e insert
+  più lenti. Senza indice la ricerca è esatta ma O(n). La soglia è tarata su questi documenti: i
+  positivi in linguaggio naturale stanno da 0.852 in su, le negative plausibili fino a 0.851. Su
+  un corpus nuovo va rimisurata; non è un numero universale.
+- **Contesto etichettato**: ogni passaggio arriva al modello come
+  `[fonte-N] (documento: ...)`, così può citare quello preciso e non un altro.
+- **Citazioni**: `citazioni()` legge i `[fonte-N]` presenti nella risposta, accetta anche le
+  parentesi larghe `【fonte-N】` che il modello produce a volte, scarta i numeri fuori intervallo e
+  deduplica. Il client riceve i chunk davvero citati, non tutto il top-k.
+- **Fuori soglia**: nessun passaggio vuol dire rifiuto, senza chiamare il modello; così non si
+  spende per una domanda che i documenti non coprono.
+- **Tetto e guasti**: l'advisor controlla lo stesso `CostTracker` della chat prima di spendere
+  (429), salva la propria spesa in `cost_events` e un guasto dell'embedder o del modello diventa
+  `LLMProviderError` (502), come nella chat.
+
+## Estensione scelta: ricerca ibrida con cancello di plausibilità
+Il vettore da solo trova quasi sempre il documento giusto, ma non sempre il passaggio giusto: su
+importi e codici il coseno può mettere davanti un documento simile e lasciare fuori il chunk che
+contiene il dato. Ho aggiunto una gamba lessicale `tsvector('italian')` con indice GIN e fuso i
+ranghi con Reciprocal Rank Fusion (`1/(60 + posizione)`), non i punteggi: coseno e `ts_rank` hanno
+scale diverse e sommarli farebbe vincere la lista con i numeri più alti per caso.
+
+La ricerca lessicale gira in due versioni: **larga** (termini in OR) per la copertura, **stretta**
+(termini in AND) per la precisione su "10.000 EUR" o su un codice composto. Il largo non può però
+tirare dentro un documento che né il vettore (sopra 0.85) né lo stretto hanno trovato: se nessuno
+dei due lo vede, la fusione torna vuota e la risposta è il rifiuto. È il **cancello di
+plausibilità**, ed è quello che trasforma una domanda fuori corpus in zero passaggi invece di
+cinque passaggi agganciati alla parola "conto".
+
+Ho scartato:
+- **sommare i punteggi grezzi** (coseno + `ts_rank`): numeri non confrontabili;
+- **solo lessico**: trova i codici ma riempie il top-k di passaggi che condividono una parola;
+- **alzare solo la soglia**: a 0.852 separerebbe l'ultima negativa, ma è a un millesimo dal
+  positivo più debole; sarebbe overfitting su 16 domande. La soglia resta 0.85 e l'ultima negativa
+  la gestisce il modello con il rifiuto.
+
+La misura, con `k=5`, baseline vettoriale a soglia 0.35 e ibrida a 0.85:
+
+| insieme | sistema | doc@5 | chunk@5 | doc@1 | MRR | negative con passaggi |
+|----------|---------|-------|---------|-------|-----|------------------------|
+| naturale (11+5) | vettoriale 0.35 | 11/11 | 11/11 | 10/11 | 0.955 | 5/5 |
+| naturale (11+5) | vettoriale 0.85 | 11/11 | 10/11 | 10/11 | 0.955 | 1/5 |
+| naturale (11+5) | ibrida 0.85 | 11/11 | 11/11 | 10/11 | 0.955 | 1/5 |
+| esatte (20) | vettoriale 0.35 | 18/20 | 16/20 | 9/20 | 0.642 | — |
+| esatte (20) | vettoriale 0.85 | 4/20 | 4/20 | 4/20 | 0.200 | — |
+| esatte (20) | ibrida 0.85 | 18/20 | 18/20 | 17/20 | 0.875 | — |
+| totale (31+5) | vettoriale 0.35 | 29/31 | 27/31 | 19/31 | 0.753 | 5/5 |
+| totale (31+5) | ibrida 0.85 | 29/31 | 29/31 | 27/31 | 0.903 | 1/5 |
+
+Il doc@5 non si muove fra baseline 0.35 e ibrida 0.85: sull'insieme naturale è già al tetto, e
+sulle esatte i due sistemi sbagliano due domande diverse. Ma la tabella mostra perché servono
+entrambe le cose: a 0.85 il vettoriale da solo perde 16 domande esatte su 20, perché il coseno di
+un codice o di un importo spesso sta sotto soglia; a 0.35 le negative entrano tutte. L'ibrida
+prende il meglio: il cancello a 0.85 tiene fuori 4 negative su 5, il lessico recupera i codici e
+gli importi. Si muovono il passaggio giusto (chunk@5 0.871 → 0.935), il primo documento (doc@1
+0.613 → 0.871), l'MRR (0.753 → 0.903) e le negative (5/5 → 1/5). I numeri si rifanno con:
+```bash
+# insieme naturale
+uv run python -m scripts.valuta_retrieval --mode vector --soglia 0.35
+uv run python -m scripts.valuta_retrieval --mode vector
+uv run python -m scripts.valuta_retrieval --mode hybrid
+# insieme esatto
+uv run python -m scripts.valuta_retrieval --mode vector --soglia 0.35 --file data/eval/domande_g5_esatte.jsonl
+uv run python -m scripts.valuta_retrieval --mode vector --file data/eval/domande_g5_esatte.jsonl
+uv run python -m scripts.valuta_retrieval --mode hybrid --file data/eval/domande_g5_esatte.jsonl
+```
+
+## Le quattro prove del cancello
+`uv run python -m scripts.prove_g5` parla con l'indice vero e con il modello vero (Groq). Stampa
+`PASS` per:
+1. domanda fuori corpus: rifiuto esatto, nessuna citazione, `tokens_used=0` e costo 0, cioè il
+   modello non viene chiamato;
+2. stesso documento caricato due volte: 2 → 2 passaggi, una citazione, una sola distinta;
+3. pagina incollata due volte: 1 → 1 passaggio, una citazione, nessun doppione;
+4. domanda vaga ("bonifico estero"): vettoriale e ibrida restituiscono passaggi e la risposta cita
+   almeno una fonte; poi stampa i cinque passaggi, così si vede che cosa ha pescato.
+
+## Su quali domande funziona e su quali no
+Funziona sulle domande fattuali coperte da un passaggio dei documenti: "quanto costa il bonifico
+istantaneo", "qual è il canone della carta oro", "quanto costano i prelievi ATM di altre banche".
+Funziona anche sui codici e sugli importi esatti, dove il vettore da solo perde il passaggio:
+`15.000 EUR`, `PRCEST07`, `€1.00`. Non funziona:
+- fuori corpus (mutui, investimenti, prodotti che non ho caricato): risponde il rifiuto, che è il
+  comportamento voluto;
+- su due domande esatte con troppe parole ("A cosa serve la MODEST50?", "Dove trovo la Lista
+  GRUPPO-A?"): il coseno scende sotto 0.85 e il lessico stretto non trova tutti i termini, quindi
+  il cancello le scarta. Il lessico largo le troverebbe, ma è proprio quello che il cancello
+  blocca per non far entrare le negative;
+- su una negativa su cinque (`q16`, "documenti per aprire un conto titoli") il vettore resta a
+  0.851 e passa la soglia: i passaggi arrivano, ma il modello risponde con il rifiuto (verificato
+  live: 585 token, zero citazioni). È il rilievo che non ho corretto: alzare la soglia a 0.852 lo
+  eliminerebbe sbilanciando il positivo più debole, e non è una scelta robusta su 16 domande;
+- sulle domande che vogliono il dato di un cliente (saldo, movimenti): quello è il percorso
+  chat/tool, non l'advisor, che non legge i conti;
+- sulle domande che sommano più documenti senza un passaggio che li copra: il top-k porta i due
+  pezzi ma la risposta può citarne uno solo;
+- sui riferimenti impliciti ("e per la oro?"): il vettore della domanda da sola non contiene il
+  turno precedente, perché qui non c'è memoria della conversazione.
+
+## Demo di due minuti
+1. `uv run alembic upgrade head && uv run python -m scripts.ingest_docs` (10 documenti, 40 passaggi).
+2. `uv run uvicorn src.main:app --reload` in un secondo terminale.
+3. `curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json" -d '{"question":"Quanto costa il bonifico istantaneo SEPA?"}'`:
+   risposta con `[fonte-N]` e citazione di `commissioni_bonifico`.
+4. La stessa chiamata con `{"question":"Qual è il tasso del mutuo agevolato per giovani coppie?"}`:
+   rifiuto, `citations: []`, `tokens_used: 0`.
+5. `uv run python -m scripts.valuta_retrieval --mode vector --soglia 0.35 --file data/eval/domande_g5_esatte.jsonl`
+   e poi `--mode hybrid --file data/eval/domande_g5_esatte.jsonl`: mostrare chunk@5 0.80 → 0.90
+   e doc@1 0.45 → 0.85.
+6. `uv run python -m scripts.prove_g5`: le quattro righe `PASS`.

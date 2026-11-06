@@ -1,0 +1,16 @@
+{"id": "q01", "question": "Qual è il limite massimo di un bonifico extra-SEPA disposto online?", "gold_document": "circolare_limiti_estero", "gold_phrase": "15.000 EUR", "answerable": true}
+{"id": "q02", "question": "Oltre quale importo un bonifico extra-SEPA richiede l'autorizzazione dell'Area Estero?", "gold_document": "circolare_limiti_estero", "gold_phrase": "50.000 EUR", "answerable": true}
+{"id": "q03", "question": "Qual è il codice della procedura per i bonifici esteri sospesi?", "gold_document": "circolare_limiti_estero", "gold_phrase": "PRCEST07", "answerable": true}
+{"id": "q04", "question": "Qual è il codice della procedura per le segnalazioni di operazioni sospette?", "gold_document": "circolare_segnalazioni", "gold_phrase": "PRCSEGN14", "answerable": true}
+{"id": "q05", "question": "Qual è il codice del programma per i clienti storici?", "gold_document": "circolare_clienti_storici", "gold_phrase": "CIRS10", "answerable": true}
+{"id": "q06", "question": "Qual è il canone annuo della carta oro per un cliente storico?", "gold_document": "circolare_clienti_storici", "gold_phrase": "30 EUR", "answerable": true}
+{"id": "q07", "question": "Entro quante ore va valutata una segnalazione di operazione sospetta?", "gold_document": "circolare_segnalazioni", "gold_phrase": "24 ore", "answerable": true}
+{"id": "q08", "question": "Qual è la soglia per le operazioni in contanti che richiedono identificazione e causale?", "gold_document": "circolare_segnalazioni", "gold_phrase": "10.000 EUR", "answerable": true}
+{"id": "q09", "question": "Quanto costa un bonifico istantaneo SEPA online?", "gold_document": "commissioni_bonifico", "gold_phrase": "€1.00", "answerable": true}
+{"id": "q10", "question": "Qual è il plafond mensile della carta di credito oro?", "gold_document": "condizioni_carta_credito", "gold_phrase": "€5.000", "answerable": true}
+{"id": "q11", "question": "Qual è il canone mensile del conto corrente principale?", "gold_document": "regolamento_conti", "gold_phrase": "€4.00", "answerable": true}
+{"id": "q12", "question": "Qual è il tasso del mutuo agevolato per giovani coppie?", "gold_document": null, "gold_phrase": null, "answerable": false}
+{"id": "q13", "question": "Qual è il rendimento del conto deposito vincolato a 12 mesi?", "gold_document": null, "gold_phrase": null, "answerable": false}
+{"id": "q14", "question": "Che commissione si applica al trading online di azioni?", "gold_document": null, "gold_phrase": null, "answerable": false}
+{"id": "q15", "question": "Qual è il limite del fido di cassa per le piccole imprese?", "gold_document": null, "gold_phrase": null, "answerable": false}
+{"id": "q16", "question": "Quali documenti servono per aprire un conto titoli?", "gold_document": null, "gold_phrase": null, "answerable": false}
