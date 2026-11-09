@@ -5,16 +5,17 @@ from pathlib import Path
 
 from sqlalchemy import delete, func, select
 
+from src.auth.deps import UserContext
 from src.config import settings
 from src.db.models import DocumentChunk
 from src.db.session import AsyncSessionLocal, engine
 from src.llm.embedding_client import Embedder
 from src.llm.factory import get_embedder, get_llm_provider
 from src.llm.prompt import load_prompt
+from src.llm.rewriter import QueryRewriter
 from src.services.ingest_service import IngestService
 from src.services.rag_service import RIFIUTO, RAGService
 from src.services.retrieval_service import RetrievalService
-from src.types.advice import AdviceRequest
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -53,6 +54,7 @@ async def rimuovi(document_id: str) -> None:
 async def _prove() -> None:
     embedder = get_embedder()
     llm = get_llm_provider()
+    utente = UserContext(username="mbianchi", role="operator")
     esiti: list[tuple[str, bool]] = []
 
     async with AsyncSessionLocal() as session:
@@ -60,15 +62,14 @@ async def _prove() -> None:
             RetrievalService(session),
             embedder,
             llm,
+            QueryRewriter(llm, load_prompt("rewrite_system_v1")),
             load_prompt("advice_system_v1"),
             mode=settings.retrieval_mode,
         )
 
         # 1. fuori corpus: rifiuto, non una citazione che non c'entra
         fuori = await rag.advise(
-            AdviceRequest(
-                question="Qual è il tasso del mutuo agevolato per giovani coppie sotto i 35 anni?"
-            )
+            "Qual è il tasso del mutuo agevolato per giovani coppie sotto i 35 anni?", utente
         )
         ok = (
             fuori.answer == RIFIUTO
@@ -85,9 +86,7 @@ async def _prove() -> None:
         # 2. lo stesso documento due volte: le citazioni non raddoppiano
         primo = await ingerisci("commissioni_bonifico", COMMISSIONI, embedder)
         secondo = await ingerisci("commissioni_bonifico", COMMISSIONI, embedder)
-        doppia = await rag.advise(
-            AdviceRequest(question="Quanto costa il bonifico istantaneo SEPA?")
-        )
+        doppia = await rag.advise("Quanto costa il bonifico istantaneo SEPA?", utente)
         coppie = [(c.document_id, c.excerpt) for c in doppia.citations]
         ok = primo == secondo and len(coppie) == len(set(coppie)) and bool(coppie)
         esiti.append(("2. doppio ingest → citazioni non duplicate", ok))
@@ -98,9 +97,7 @@ async def _prove() -> None:
         try:
             una = await ingerisci("pagina_ripetuta", PAGINA, embedder)
             due = await ingerisci("pagina_ripetuta", PAGINA + "\n\n" + PAGINA, embedder)
-            ripetuta = await rag.advise(
-                AdviceRequest(question="Cosa richiede la procedura PROVA2026?")
-            )
+            ripetuta = await rag.advise("Cosa richiede la procedura PROVA2026?", utente)
             coppie = [(c.document_id, c.excerpt) for c in ripetuta.citations]
             ok = una == due and len(coppie) == len(set(coppie)) and bool(coppie)
             esiti.append(("3. pagina ripetuta → nessuna citazione identica", ok))
@@ -115,7 +112,7 @@ async def _prove() -> None:
         servizio = RetrievalService(session)
         vettoriali = await servizio.search(vettore)
         ibridi = await servizio.search_hybrid(vettore, vaga)
-        risposta = await rag.advise(AdviceRequest(question=vaga))
+        risposta = await rag.advise(vaga, utente)
         print(f"[INFO] domanda vaga {vaga!r}")
         print(f"       vettoriale: {[(p.document_id, round(p.similarity, 3)) for p in vettoriali]}")
         print(f"       ibrido:     {[(p.document_id, round(p.similarity, 3)) for p in ibridi]}")

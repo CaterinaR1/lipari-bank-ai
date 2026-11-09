@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
-    retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
+    retrieval_mode: Literal["vector", "hybrid"] = "vector"
 
     default_model: str = "gpt-4o-mini"
     max_tokens_per_request: int = 2000

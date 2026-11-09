@@ -11,8 +11,9 @@ import httpx2
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
-from src.config import settings
+from src.auth.deps import UserContext
 from src.llm.embedding_client import EmbeddingClient
+from src.llm.rewriter import QueryRewriter
 from src.llm.types import LLMResponse, Message, ToolSpec
 from src.services.categorize_rules import categorizza
 from src.types.categorize import CategorizeRequest, CategorizeResponse
@@ -229,12 +230,14 @@ class CategorizzazioneARegole:
         return categorizza(req)
 
 
+DIM_EMBEDDING = 384  # la dimensione della colonna document_chunks.embedding: Vector(384)
+
+
 def vettore(testo: str) -> list[float]:
     """Un embedding finto ma coerente: le parole in comune avvicinano i testi."""
-    dim = settings.embedding_dim
-    v = [0.0] * dim
+    v = [0.0] * DIM_EMBEDDING
     for parola in re.findall(r"\w{3,}", testo.lower()):
-        v[int(hashlib.md5(parola.encode()).hexdigest(), 16) % dim] += 1.0
+        v[int(hashlib.md5(parola.encode()).hexdigest(), 16) % DIM_EMBEDDING] += 1.0
     norma = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norma for x in v]
 
@@ -279,3 +282,12 @@ class ModelloFisso:
         self, messages: list[Message], max_tokens: int = 500
     ) -> AsyncIterator[str | LLMResponse]:
         yield await self.complete(messages, max_tokens)
+
+
+MARCO = UserContext(username="mbianchi", role="operator")  # chi chiede, nei test senza token
+GIULIA = UserContext(username="grossi", role="compliance_lead")
+
+
+def riscrittore_spento() -> QueryRewriter:
+    """Il riscrittore dei test che non parlano di riscrittura: la domanda passa com'è."""
+    return QueryRewriter(ModelloEco(), "", enabled=False)

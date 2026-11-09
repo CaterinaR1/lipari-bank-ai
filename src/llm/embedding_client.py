@@ -14,6 +14,10 @@ class Embedder(Protocol):
     documento e per la domanda; chi usa l'embedder non deve sapere quale modello c'è sotto.
     """
 
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_one(self, text: str) -> list[float]: ...
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
     async def embed_query(self, text: str) -> list[float]: ...
@@ -32,8 +36,11 @@ class EmbeddingClient:
             raise LLMProviderError("openai", str(e)) from e
         return [item.embedding for item in response.data]
 
+    async def embed_one(self, text: str) -> list[float]:
+        return (await self.embed([text]))[0]
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return await self.embed(texts)
 
     async def embed_query(self, text: str) -> list[float]:
-        return (await self.embed([text]))[0]
+        return await self.embed_one(text)

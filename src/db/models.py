@@ -108,6 +108,9 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embedding_dim))
     chunk_metadata: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    visibility: Mapped[str] = mapped_column(
+        String(32), default="public", server_default="public", index=True
+    )
 
 
 # ---- la spesa che non passa dalla chat (per ora solo l'advisor sui documenti)
@@ -126,3 +129,13 @@ class CostEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=adesso, index=True
     )
+
+class AppUser(Base):
+    __tablename__ = "app_users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(128))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(32), default="operator")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=adesso)

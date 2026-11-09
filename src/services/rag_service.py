@@ -1,11 +1,24 @@
-# src/services/rag_service.py — recupera, genera, e cita solo ciò che la risposta usa
+# src/services/rag_service.py — la pipeline a fasi: riscrivi, cerca per ruolo, genera, misura
+import asyncio
+import logging
 import re
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
+from decimal import Decimal
 
+from src.auth.acl import visible_to
+from src.auth.deps import UserContext
+from src.exceptions import LLMProviderError
 from src.llm.client import LLMProvider
 from src.llm.embedding_client import Embedder
+from src.llm.rewriter import QueryRewriter
 from src.llm.types import Message
 from src.services.retrieval_service import RetrievalResult, RetrievalService, SearchMode
-from src.types.advice import AdviceRequest, AdviceResponse, Citation
+from src.types.advice import AdviceResponse, Citation
+
+logger = logging.getLogger(__name__)
 
 RIFIUTO = "Non ho trovato informazioni sufficienti nei documenti disponibili."
 # Il modello a volte usa le parentesi larghe 【fonte-1】 invece di [fonte-1]: sono lo
@@ -44,51 +57,143 @@ def citazioni(risposta: str, passaggi: list[RetrievalResult]) -> list[Citation]:
     return usati
 
 
+@dataclass
+class Fasi:
+    """Millisecondi per fase, per il log strutturato della richiesta."""
+
+    rewrite_ms: int = 0
+    embedding_ms: int = 0
+    retrieval_ms: int = 0
+    prompt_ms: int = 0
+    llm_ms: int = 0
+    used_fallback: bool = False
+
+    @property
+    def total_ms(self) -> int:
+        return (
+            self.rewrite_ms + self.embedding_ms + self.retrieval_ms + self.prompt_ms + self.llm_ms
+        )
+
+
+@dataclass
+class Generazione:
+    """Cosa esce dalla generazione. Quando il modello non si chiama, zero è il costo vero."""
+
+    testo: str
+    tokens_used: int = 0
+    cost_eur: Decimal = Decimal("0")
+    degradata: bool = False
+    model: str | None = None
+
+
+@contextmanager
+def _cronometro(fasi: Fasi, campo: str) -> Iterator[None]:
+    inizio = time.perf_counter()
+    try:
+        yield
+    finally:
+        setattr(fasi, campo, int((time.perf_counter() - inizio) * 1000))
+
+
 class RAGService:
-    """Recupera i passaggi, li passa al modello come vincolo, cita le fonti usate."""
+    """Riscrive, recupera per ruolo, genera, e misura ogni fase."""
+
+    TIMEOUT_GENERAZIONE_S = 10
 
     def __init__(
         self,
         retrieval: RetrievalService,
         embedder: Embedder,
         llm: LLMProvider,
+        rewriter: QueryRewriter,
         prompt: str,
-        mode: SearchMode = "hybrid",
+        mode: SearchMode = "vector",
     ) -> None:
         self.retrieval = retrieval
         self.embedder = embedder
         self.llm = llm
+        self.rewriter = rewriter
         self.prompt = prompt
         self.mode = mode
 
-    async def advise(self, req: AdviceRequest) -> AdviceResponse:
-        """Recupera, genera, e ritorna la risposta con le fonti che usa.
+    async def advise(
+        self,
+        question: str,
+        user: UserContext,
+        history: list[str] | None = None,
+    ) -> AdviceResponse:
+        fasi = Fasi()
 
-        Se il recupero non porta niente sopra la soglia, ritorna il rifiuto e nessuna
-        citazione, senza chiamare il modello.
-        """
-        vettore = await self.embedder.embed_query(req.question)
-        if self.mode == "hybrid":
-            passaggi = await self.retrieval.search_hybrid(vettore, req.question)
+        with _cronometro(fasi, "rewrite_ms"):
+            search_query = await self.rewriter.rewrite_cached(question, history)
+
+        with _cronometro(fasi, "embedding_ms"):
+            query_vec = await self.embedder.embed_one(search_query)
+
+        with _cronometro(fasi, "retrieval_ms"):
+            if self.mode == "hybrid":
+                chunks = await self.retrieval.search_hybrid(
+                    query_vec, question, livelli=visible_to(user.role)
+                )
+            else:
+                chunks = await self.retrieval.search_for_user(query_vec, user.role)
+
+        if chunks:
+            with _cronometro(fasi, "prompt_ms"):
+                # La riscritta serve al retrieval. Al modello va la domanda dell'utente.
+                messaggi = [
+                    Message(role="system", content=self.prompt),
+                    Message(
+                        role="user",
+                        content=f"CONTESTO\n{contesto(chunks)}\n\nDOMANDA\n{question}",
+                    ),
+                ]
+            with _cronometro(fasi, "llm_ms"):
+                gen = await self._generate_or_degrade(messaggi, chunks)
         else:
-            passaggi = await self.retrieval.search(vettore)
-        if not passaggi:
-            return AdviceResponse(answer=RIFIUTO, citations=[], tokens_used=0, cost_eur=0.0)
+            # il rifiuto: niente sopra la soglia, e il modello non si chiama
+            gen = Generazione(RIFIUTO)
+        fasi.used_fallback = gen.degradata
 
-        risposta = await self.llm.complete(
-            [
-                Message(role="system", content=self.prompt),
-                Message(
-                    role="user",
-                    content=f"CONTESTO\n{contesto(passaggi)}\n\nDOMANDA\n{req.question}",
-                ),
-            ]
+        logger.info(
+            "advice_completata",
+            extra={
+                "username": user.username,
+                "role": user.role,
+                "chunk_count": len(chunks),
+                "chunk_ids": [r.chunk_id for r in chunks],  # gli id, mai il testo
+                "history_turns": len(history or []),
+                **asdict(fasi),
+                "total_ms": fasi.total_ms,
+            },
         )
-        rifiuto = RIFIUTO in risposta.content  # il modello ha detto che non c'è: niente fonti
         return AdviceResponse(
-            answer=risposta.content,
-            citations=[] if rifiuto else citazioni(risposta.content, passaggi),
-            tokens_used=risposta.tokens_used,
-            cost_eur=float(risposta.cost_eur),
-            model=risposta.model,
+            answer=gen.testo,
+            citations=[] if RIFIUTO in gen.testo else citazioni(gen.testo, chunks),
+            tokens_used=gen.tokens_used,
+            cost_eur=float(gen.cost_eur),
+            model=gen.model,
+            rewritten_query=search_query,
         )
+
+    async def _generate_or_degrade(
+        self, messaggi: list[Message], chunks: list[RetrievalResult]
+    ) -> Generazione:
+        try:
+            async with asyncio.timeout(self.TIMEOUT_GENERAZIONE_S):
+                risposta = await self.llm.complete(messaggi, max_tokens=500)
+            return Generazione(
+                risposta.content, risposta.tokens_used, risposta.cost_eur, model=risposta.model
+            )
+        except (LLMProviderError, TimeoutError):
+            logger.warning("generator_non_disponibile_fallback_su_chunk")
+            estratti = "\n\n".join(
+                f"[fonte-{i}] {r.document_id}\n{r.content}"
+                for i, r in enumerate(chunks[:3], start=1)
+            )
+            return Generazione(
+                "⚠️ Risposta parziale: il servizio di sintesi non è momentaneamente "
+                "disponibile. Di seguito i passaggi dei documenti più pertinenti "
+                f"alla tua domanda.\n\n{estratti}",
+                degradata=True,
+            )

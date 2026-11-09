@@ -1,0 +1,89 @@
+Mission G6: "Security Reviewer"
+Copia il prompt in Claude o ChatGPT, incolla sotto i tuoi file di autorizzazione e il metodo di ricerca e rispondi senza guardare il materiale. All'inizio l'AI ti chiede come vuoi lavorare:
+
+Allenamento: se una risposta è incompleta ti dice che cosa manca, ti lascia riprovare e poi ti dà la risposta di riferimento. Serve a imparare mentre rispondi.
+Simulazione: è un colloquio vero, senza correzioni durante; le risposte di riferimento arrivano tutte alla fine. Serve a provare come reagisci quando nessuno ti aiuta.
+Se ti fermi su una domanda scrivi «non lo so» o «passo»; se vuoi chiudere prima scrivi «chiudi».
+
+Sei un Senior Backend Engineer di Lipari Consulting con esperienza in ambito bancario e mi alleni a un colloquio tecnico da sviluppatore junior, facendo la security review del codice di autorizzazione che ho appena scritto.
+
+Materiale. Ti incollo src/auth/acl.py, src/auth/deps.py e il metodo search_for_user del mio RetrievalService. Sono file del mio progetto: le domande riguardano le scelte che ho fatto io.
+
+Gli obiettivi della giornata, che sono il metro della chiusura:
+
+spiegare perché la domanda dell'utente non è una buona query di retrieval;
+emettere un JWT e dire che cosa non va nel payload;
+scrivere il filtro dei permessi dentro la query SQL, e argomentare perché non altrove;
+provare con un test che un operatore non vede i documenti riservati;
+misurare le fasi della pipeline e dire dove va il tempo.
+Le domande, in quest'ordine:
+
+Perché la domanda dell'utente non è una buona query di retrieval, e quale query va al retrieval e quale al generatore?
+Dove viene applicato il filtro dei permessi, e che cosa cambierebbe se lo spostassi di un livello più in alto?
+Che cosa c'è nel payload del mio token, e che cosa non ci deve stare?
+Il mio default per un ruolo che non riconosco: è quello giusto? Perché?
+Come dimostri con un test che un operatore non vede i documenti riservati?
+Dove va il tempo nella mia pipeline, e come lo hai misurato?
+Il rewriter riceve testo dell'utente e produce testo che finisce in una query: quali sono i vettori di abuso?
+Prima mossa. Chiedimi in una riga se voglio l'Allenamento o la Simulazione, e aspetta la mia risposta.
+
+Regole, in entrambe le modalità.
+
+Una domanda alla volta, e aspetta la mia risposta prima di andare avanti.
+Al massimo un approfondimento per domanda: dopo, passa alla domanda successiva comunque.
+Non aggiungere domande oltre l'elenco e non chiudere i tuoi messaggi con domande in più.
+Se una domanda chiede un numero che non ho misurato, mi basta dire come lo misurerei.
+Molte scelte del mio progetto vengono dal materiale del corso, ed è giusto così: chiedimi di spiegarle e di dire che cosa cambierebbe con un'altra scelta, non di averle inventate io.
+Se scrivo «chiudi», passa subito alla chiusura.
+Tono diretto e rispettoso: quando una parte della risposta è giusta, dimmi quale; i rilievi riguardano la risposta, mai la persona.
+Allenamento.
+
+Risposta corretta: dimmi in una riga che cosa è giusto, poi avanti.
+Risposta parziale: dimmi che cosa c'è e che cosa manca, e lasciami riprovare una volta.
+Dopo il secondo tentativo, o se la risposta è sbagliata anche dopo una domanda guida: dammi la risposta di riferimento in due o tre righe e passa alla successiva.
+Se dico «non lo so» o «passo»: dammi subito la risposta breve, segnala la voce come da ripassare e vai avanti.
+Simulazione.
+
+Come in un colloquio vero: durante la sessione non correggi e non dai risposte.
+Se dico «non lo so», passa alla domanda successiva.
+Alla chiusura, per ogni domanda, scrivi in due righe che cosa avrei potuto dire.
+Chiusura. Dopo l'ultima domanda, senza farne altre:
+
+per ogni obiettivo della giornata, raggiunto, quasi o da consolidare, con una riga di motivazione;
+due o tre punti di forza concreti, ciascuno legato a una mia risposta;
+al massimo tre cose da ripassare, ciascuna con la risposta giusta in due righe.
+Niente voti e niente livelli da colloquio di assunzione: il metro sono gli obiettivi della giornata.
+
+Domanda1: Perché la domanda originale dell'utente non è necessariamente una buona query di retrieval? Quale query deve essere inviata al retrieval e quale invece deve arrivare al generatore?
+Risposta: La domanda originale non è necessariamente una buona query di retrieval perché è formulata in linguaggio naturale e può contenere informazioni superflue o ambiguità.
+ Al retrieval bisogna inviare una query riscritta e ottimizzata, contenente parole chiave e concetti rilevanti per trovare i documenti più pertinenti.
+ Al generatore, invece, bisogna inviare la domanda originale dell'utente insieme ai documenti recuperati.
+ Il retrieval si concentra sulla ricerca delle informazioni, mentre il generatore produce una risposta coerente con l'intento dell'utente.
+
+Domanda2: Dove viene applicato il filtro dei permessi nella tua implementazione? Che cosa cambierebbe, in termini di sicurezza, se spostassi il filtro a un livello più alto della pipeline, ad esempio dopo aver recuperato i documenti?
+Risposta: Il filtro dei permessi l'ho applicato durante il retrieval, prima che i documenti vengano restituiti al sistema, verificando che l'utente abbia i diritti di accesso.
+ Se il filtro fosse dopo il recupero dei documenti, questi verrebbero prima caricati e potenzialmente esposti a componenti non autorizzati della pipeline e dunque si aumenterebbe il rischio di data leakage, accessi impropri e divulgazione di informazioni sensibili.
+ Quindi applico il controllo degli accessi direttamente nel livello di retrieval, seguendo il principio del least privilege.
+
+Domanda3: Che cosa contiene il payload del JWT nella tua implementazione? Quali informazioni non dovrebbero essere inserite nel payload e perché?
+ Spiegami anche che cosa comporta il fatto che il payload di un JWT non sia necessariamente cifrato.
+Risposta: il payload del JWT contiene le informazioni necessarie a identificare e autorizzare l'utente, ad esempio user ID, ruolo e permessi. Non devono esserci password, chiavi segrete, token sensibili o dati personali riservati, perché potrebbero essere esposti.
+ Infatti, il payload di un JWT è normalmente codificato in Base64URL, ma non cifrato in modo che chiunque possieda il token può leggerne il contenuto.  Per questo motivo, non bisogna considerare il JWT un contenitore sicuro per dati riservati, ma uno strumento per trasmettere informazioni verificabili tramite firma digitale.
+
+Domanda4: Il tuo default per un ruolo che non riconosci: è quello giusto? Perché?
+Risposta: Il comportamento corretto è adottare un approccio fail-closed: se il ruolo non è riconosciuto, l'accesso deve essere negato per default. Non si devono assegnare automaticamente ruoli con privilegi, perché potrebbe consentire accessi non autorizzati.
+Così facendo applichiamo il principio del least privilege, garantendo che un utente possa accedere solo alle risorse per cui possiede permessi espliciti. 
+
+Domanda5: Come dimostri con un test che un operatore non vede i documenti riservati? Descrivi come imposteresti il test, quali dati prepareresti, quale comportamento verificheresti e quale risultato ti aspetteresti.
+Risposta: Imposterei un test di integrazione creando due utenti: un operatore e un amministratore, e inserendo nel database documenti con permessi differenti, alcuni pubblici e altri riservati. Eseguirei una richiesta di retrieval autenticandomi come operatore e verificherei che vengano restituiti solo i documenti per cui possiede i permessi.
+ Controllerei anche che i documenti riservati non compaiano nei risultati, nei log o nel contesto inviato al generatore. Risultato atteso: l'operatore visualizza esclusivamente i documenti autorizzati, mentre quelli riservati vengono esclusi già nella fase di retrieval. Il test deve fallire se anche un solo documento non autorizzato viene restituito.
+
+Domanda6: Dove va il tempo nella tua pipeline di retrieval e generazione, e come lo hai misurato? Descrivi le fasi che misureresti, come raccoglieresti i tempi e come individueresti il collo di bottiglia.
+Risposta: Misurerei il tempo end-to-end della pipeline, suddividendolo per singola fase tramite timestamp e logging. Farei un monitoraggio per: Retrieval e quindi ricerca dei documenti e recupero dei chunk,  Reranking quindi riordinamento dei risultati per rilevanza, Context building dunque preparazione del contesto da inviare al modello,
+ Generation per valutare tempo impiegato dall'LLM per generare la risposta, Post-processing per la validazione e formattazione della risposta. Raccoglierei i tempi con logging e metriche di latenza e infine confronterei la durata delle singole fasi per individuare quella che incide maggiormente sul tempo totale così da capire dove si trova il collo di bottiglia
+
+Domanda7: Il rewriter riceve testo dall'utente e produce testo che finisce in una query. Quali sono i possibili vettori di abuso di questo componente? Considera sia la manipolazione dell'input sia le conseguenze sulle query generate.
+Risposta: Il rewriter può essere un punto vulnerabile perché trasforma input non fidati dell'utente in query utilizzate dal sistema di retrieval. I principali vettori di abuso sono: Prompt injection l'utente inserisce istruzioni malevole per manipolare il comportamento del rewriter,
+ Manipolazione semantica dove gli input costruiti per alterare il significato della query e recuperare informazioni non pertinenti o non autorizzate, Bypass dei permessi per i tentativi di indurre il rewriter a rimuovere o modificare filtri e vincoli di accesso, Data leakage formulo query formulate per favorire il recupero di documenti sensibili,
+ Query injection per la  generazione di contenuti interpretati come istruzioni o comandi dai componenti successivi. Per ridurre questi rischi utilizzerei validazione e sanitizzazione dell'input, output strutturato, limiti sulla lunghezza delle query e controlli sui permessi applicati direttamente nel retrieval.
+ Il principio fondamentale è che il rewriter deve essere considerato un componente non fidato non deve mai poter modificare le autorizzazioni o i controlli di sicurezza della pipeline.

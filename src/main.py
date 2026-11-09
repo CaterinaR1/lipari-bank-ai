@@ -1,4 +1,4 @@
-# src/main.py — Giorno 2: la sonda di ieri, gli handler degli errori, i middleware, i router
+# src/main.py — l'applicazione: la sonda, gli handler degli errori, i middleware, i router
 import logging
 import re
 import time
@@ -11,9 +11,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.api import accounts, advice, categorize, chat, glossary, movements
+from src.api import accounts, advice, auth, categorize, chat, glossary, movements
 from src.config import settings
 from src.exceptions import AppError, RateLimitError
 from src.types.error import ErrorResponse
@@ -169,3 +170,14 @@ app.include_router(categorize.router)
 app.include_router(movements.router)
 app.include_router(accounts.router)
 app.include_router(advice.router)
+app.include_router(auth.router)
+
+app.state.limiter = advice.limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def handle_rate_limit(req: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": "60"},
+        content=_busta(req, 429, "RATE_LIMIT", "Troppe richieste: riprova fra un minuto"),
+    )

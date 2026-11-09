@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.deps import UserContext, get_current_user
 from src.config import settings
 from src.db.session import get_db
 from src.llm.client import LLMProvider
@@ -18,7 +19,6 @@ from src.types.chat import ChatRequest, ChatResponse
 router = APIRouter(prefix="/api/ai", tags=["Chat"])
 
 SYSTEM_PROMPT = load_prompt("chat_system_v1")
-OPERATORE = "mbianchi"  # finto: l'operatore del seed, finché non arriva l'autenticazione
 
 
 def get_chat_service(
@@ -29,19 +29,24 @@ def get_chat_service(
         session, llm, SYSTEM_PROMPT, settings.daily_budget_eur, settings.default_model
     )
 
-
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
-    req: ChatRequest, service: Annotated[ChatService, Depends(get_chat_service)]
+    req: ChatRequest,
+    user: Annotated[UserContext, Depends(get_current_user)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> ChatResponse:
-    return await service.chat(req, user_id=OPERATORE)
+    return await service.chat(req, user_id=user.username)  # l'utente del token
 
 
 @router.post("/chat/stream")
 async def chat_stream(
-    req: ChatRequest, service: Annotated[ChatService, Depends(get_chat_service)]
+    req: ChatRequest,
+    user: Annotated[UserContext, Depends(get_current_user)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> StreamingResponse:
-    pezzi = await service.chat_stream(req, user_id=OPERATORE)  # un 404 esce qui, prima dello stream
+    pezzi = await service.chat_stream(
+        req, user_id=user.username
+    )  # un 404 esce qui, prima dello stream
 
     async def eventi() -> AsyncIterator[str]:
         async for pezzo in pezzi:

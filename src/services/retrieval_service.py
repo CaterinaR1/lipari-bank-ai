@@ -6,10 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy import text as sql
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Tarata sui documenti di questa banca: i positivi stanno da 0.852 in su, le negative
-# plausibili fino a 0.851. Non è un numero universale, e l'ultima negativa resta sopra
-# la soglia: alzarla ancora sarebbe inseguire un millesimo.
-SOGLIA_PREDEFINITA = 0.85
+from src.auth.acl import visible_to
+
+SOGLIA_PREDEFINITA = 0.35  # da tarare sui propri documenti: non è un numero universale
 RRF_K = 60  # la costante standard di Reciprocal Rank Fusion
 SearchMode = Literal["vector", "hybrid"]
 
@@ -47,25 +46,81 @@ class RetrievalService:
         """
     )
 
+        # le stesse query con UNA riga in più, dentro il WHERE e prima dell'ordinamento
+    SQL_PER_RUOLO = sql(
+        """
+        SELECT id, document_id, content,
+               1 - (embedding <=> CAST(:q AS vector)) AS similarity
+        FROM document_chunks
+        WHERE 1 - (embedding <=> CAST(:q AS vector)) >= :soglia
+          AND visibility = ANY(:livelli)                     -- <- la riga
+        ORDER BY embedding <=> CAST(:q AS vector)
+        LIMIT :k
+        """
+    )
+
+    SQL_LESSICALE_PER_RUOLO = sql(
+        """
+        SELECT id, document_id, content
+        FROM document_chunks
+        WHERE to_tsvector('italian', content) @@ websearch_to_tsquery('italian', :q)
+          AND visibility = ANY(:livelli)                     -- <- la riga
+        ORDER BY ts_rank(
+            to_tsvector('italian', content), websearch_to_tsquery('italian', :q)
+        ) DESC
+        LIMIT :k
+        """
+    )
+
 
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def search(
-        self, query_vec: list[float], top_k: int = 5, soglia: float = SOGLIA_PREDEFINITA
+        self,
+        query_vec: list[float],
+        top_k: int = 5,
+        soglia: float = SOGLIA_PREDEFINITA,
+        livelli: list[str] | None = None,
     ) -> list[RetrievalResult]:
-        """I passaggi più vicini al vettore della domanda, dal più vicino.
+        """... (docstring com'è) ...
 
-        Prende il **vettore**, non la domanda: vettorizzare è compito di chi chiama, e
-        così la stessa ricerca serve chiunque abbia già il vettore, senza pagare un
-        embedding che qualcuno ha già fatto.
+        Con `livelli=None` NON c'è filtro di visibilità: solo per ingestione e script.
+        Da una richiesta HTTP si passano sempre i livelli del ruolo.
+        """
+        parametri: dict[str, object] = {"q": str(query_vec), "k": top_k, "soglia": soglia}
+        if livelli is None:
+            righe = await self.session.execute(self.SQL, parametri)
+        else:
+            righe = await self.session.execute(
+                self.SQL_PER_RUOLO, parametri | {"livelli": livelli}
+            )
+        return [
+            RetrievalResult(
+                chunk_id=str(r.id),
+                document_id=r.document_id,
+                content=r.content,
+                similarity=float(r.similarity),
+            )
+            for r in righe
+        ]
 
-        Sotto la soglia non torna niente: una lista vuota è una risposta, e il chiamante
-        deve poterla distinguere da cinque passaggi irrilevanti.
+    async def search_for_user(
+        self,
+        query_vec: list[float],
+        role: str,
+        top_k: int = 5,
+        soglia: float = SOGLIA_PREDEFINITA,
+    ) -> list[RetrievalResult]:
+        """I passaggi più vicini FRA QUELLI che questo ruolo può vedere.
+
+        Il filtro sui livelli sta DENTRO la query, non dopo: il database non deve
+        nemmeno restituire i passaggi che questo ruolo non può vedere.
         """
         righe = await self.session.execute(
-            self.SQL, {"q": str(query_vec), "k": top_k, "soglia": soglia}
+            self.SQL_PER_RUOLO,
+            {"q": str(query_vec), "k": top_k, "soglia": soglia, "livelli": visible_to(role)},
         )
         return [
             RetrievalResult(
@@ -77,7 +132,12 @@ class RetrievalService:
             for r in righe
         ]
 
-    async def search_lexical(self, query_text: str, top_k: int = 5) -> list[RetrievalResult]:
+    async def search_lexical(
+        self,
+        query_text: str,
+        top_k: int = 5,
+        livelli: list[str] | None = None,
+    ) -> list[RetrievalResult]:
         """La ricerca per parole: trova i codici e le sigle che il vettore non avvicina.
 
         Il punteggio lessicale non viene esposto come `similarity`: non è un coseno e
@@ -92,7 +152,13 @@ class RetrievalService:
         if not termini:
             return []
         query = " or ".join(termini)
-        righe = await self.session.execute(self.SQL_LESSICALE, {"q": query, "k": top_k})
+        parametri: dict[str, object] = {"q": query, "k": top_k}
+        if livelli is None:
+            righe = await self.session.execute(self.SQL_LESSICALE, parametri)
+        else:
+            righe = await self.session.execute(
+                self.SQL_LESSICALE_PER_RUOLO, parametri | {"livelli": livelli}
+            )
         return [
             RetrievalResult(
                 chunk_id=str(r.id),
@@ -104,7 +170,7 @@ class RetrievalService:
         ]
 
     async def search_lexical_strict(
-        self, query_text: str, top_k: int = 5
+        self, query_text: str, top_k: int = 5, livelli: list[str] | None = None,
     ) -> list[RetrievalResult]:
         """La ricerca per parole senza OR: tutti i termini nello stesso passaggio.
 
@@ -113,7 +179,13 @@ class RetrievalService:
         """
         if not re.search(r"\w", query_text):
             return []
-        righe = await self.session.execute(self.SQL_LESSICALE, {"q": query_text, "k": top_k})
+        parametri: dict[str, object] = {"q": query_text, "k": top_k}
+        if livelli is None:
+            righe = await self.session.execute(self.SQL_LESSICALE, parametri)
+        else:
+            righe = await self.session.execute(
+                self.SQL_LESSICALE_PER_RUOLO, parametri | {"livelli": livelli}
+            )
         return [
             RetrievalResult(
                 chunk_id=str(r.id),
@@ -130,6 +202,7 @@ class RetrievalService:
         query_text: str,
         top_k: int = 5,
         soglia: float = SOGLIA_PREDEFINITA,
+        livelli: list[str] | None = None,
     ) -> list[RetrievalResult]:
         """Fonde i due elenchi con Reciprocal Rank Fusion.
 
@@ -138,11 +211,9 @@ class RetrievalService:
         punteggi grezzi farebbe vincere sempre la lista che, per caso, ha numeri più alti.
         """
         profondita = max(top_k * 10, 50)
-        vettoriali = await self.search(query_vec, top_k=top_k * 3, soglia=soglia)
-        # La lista lessicale va presa profonda: un codice esatto può stare sotto molti
-        # passaggi che condividono una parola comune come "bonifico".
-        lessicali = await self.search_lexical(query_text, top_k=profondita)
-        stretti = await self.search_lexical_strict(query_text, top_k=profondita)
+        vettoriali = await self.search(query_vec, top_k=top_k * 3, soglia=soglia, livelli=livelli)
+        lessicali = await self.search_lexical(query_text, top_k=profondita, livelli=livelli)
+        stretti = await self.search_lexical_strict(query_text, top_k=profondita, livelli=livelli)
 
         # Il lessico largo non può tirare dentro un documento che né il vettore né la
         # ricerca stretta hanno trovato: altrimenti una domanda fuori corpus entra

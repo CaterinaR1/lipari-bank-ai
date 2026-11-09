@@ -48,6 +48,12 @@ class LocalEmbeddingClient:
         vettori = await asyncio.to_thread(lambda: list(modello.embed(texts)))
         return [[float(x) for x in vettore] for vettore in vettori]
 
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
+    async def embed_one(self, text: str) -> list[float]:
+        return await self.embed_query(text)
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return await self._embed([f"passage: {testo}" for testo in texts])
 

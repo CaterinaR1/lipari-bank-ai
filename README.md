@@ -206,24 +206,30 @@ del seed, mai dati reali di clienti.
 ```bash
 docker compose up -d                         # Postgres 16 con pgvector
 uv run alembic upgrade head                  # chunk a 384 dimensioni, cost_events, GIN
-uv run python -m scripts.ingest_docs         # data/docs/*.md, diretto sul database
-uv run uvicorn src.main:app --reload         # API su http://localhost:8000
+uv run python -m scripts.seed_users          # i tre utenti di sviluppo (password: bootcamp)
+uv run uvicorn src.main:app --reload         # secondo terminale: API su http://localhost:8000
+uv run python -m scripts.ingest_docs         # terzo terminale: Giulia ingerisce data/docs/*.md
 uv run python -m scripts.prove_g5            # le quattro prove live
 uv run python -m scripts.valuta_retrieval --mode vector
 uv run python -m scripts.valuta_retrieval --mode hybrid
 uv run ruff check . && uv run mypy src scripts && uv run pytest
 ```
-L'ingestione non passa più dagli endpoint: `scripts/ingest_docs.py` apre la sessione e usa lo
-stesso `IngestService`, quindi il server non serve per popolare l'indice. Gli embedding sono
+`scripts/ingest_docs.py` fa login come `grossi` (compliance_lead) e passa dall'endpoint
+`POST /api/ai/documents/ingest`: il server deve essere già su. Il livello di visibilità è preso
+dalla sottocartella (`public`, `internal`, `risk_only`, `compliance_only`). Gli embedding sono
 locali (`EMBEDDING_BACKEND=local`, `intfloat/multilingual-e5-small`, 384 dimensioni): al primo uso
 fastembed scarica il modello ONNX, poi resta nella cache. Non serve `EMBEDDING_API_KEY`; il
 percorso OpenAI resta disponibile con `EMBEDDING_BACKEND=openai` e una chiave vera. Per i test
 serve il database di prova:
 `docker compose exec postgres createdb -U lipari lipari_ai_test`.
 
-Le domande si fanno così, una volta che il corpus è nell'indice:
+Le domande si fanno così, una volta che il corpus è nell'indice e l'utente ha fatto login:
 ```bash
-curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json" \
+TOKEN=$(curl -s -X POST localhost:8000/api/auth/login \
+  -d "username=mbianchi&password=bootcamp" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -s -X POST localhost:8000/api/ai/advice \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"question":"Quanto costa il bonifico istantaneo SEPA?"}'
 ```
 
@@ -239,11 +245,12 @@ curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json"
   del taglio tolgo i paragrafi identici (una pagina incollata due volte), perché con l'overlap le
   copie non sarebbero mai chunk uguali. Chunk più piccoli sono più precisi ma perdono contesto e
   fanno più chiamate; chunk più grandi mescolano più argomenti e il top-k porta rumore.
-- **HNSW con coseno**: indice `vector_cosine_ops`, top-k 5, soglia 0.85. HNSW guadagna velocità
-  (non confronta la domanda con tutti i vettori) e paga RAM, spazio, tempo di costruzione e insert
-  più lenti. Senza indice la ricerca è esatta ma O(n). La soglia è tarata su questi documenti: i
-  positivi in linguaggio naturale stanno da 0.852 in su, le negative plausibili fino a 0.851. Su
-  un corpus nuovo va rimisurata; non è un numero universale.
+- **HNSW con coseno**: indice `vector_cosine_ops`, top-k 5, soglia di default 0.35 sul vettoriale.
+  HNSW guadagna velocità (non confronta la domanda con tutti i vettori) e paga RAM, spazio, tempo
+  di costruzione e insert più lenti. Senza indice la ricerca è esatta ma O(n). La variante ibrida
+  alza il cancello a 0.85: su questi documenti i positivi in linguaggio naturale stanno da 0.852 in
+  su, le negative plausibili fino a 0.851. Su un corpus nuovo va rimisurata; non è un numero
+  universale.
 - **Contesto etichettato**: ogni passaggio arriva al modello come
   `[fonte-N] (documento: ...)`, così può citare quello preciso e non un altro.
 - **Citazioni**: `citazioni()` legge i `[fonte-N]` presenti nella risposta, accetta anche le
@@ -255,7 +262,9 @@ curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json"
   (429), salva la propria spesa in `cost_events` e un guasto dell'embedder o del modello diventa
   `LLMProviderError` (502), come nella chat.
 
-## Estensione scelta: ricerca ibrida con cancello di plausibilità
+## Estensione del Giorno 5: ricerca ibrida con cancello di plausibilità
+L'ibrida resta disponibile con `RETRIEVAL_MODE=hybrid`; dal Giorno 6 il default è `vector` a 0.35,
+perché la novità è il filtro per ruolo e non voglio sommare due variabili nella stessa misura.
 Il vettore da solo trova quasi sempre il documento giusto, ma non sempre il passaggio giusto: su
 importi e codici il coseno può mettere davanti un documento simile e lasciare fuori il chunk che
 contiene il dato. Ho aggiunto una gamba lessicale `tsvector('italian')` con indice GIN e fuso i
@@ -336,17 +345,76 @@ Funziona anche sui codici e sugli importi esatti, dove il vettore da solo perde 
   chat/tool, non l'advisor, che non legge i conti;
 - sulle domande che sommano più documenti senza un passaggio che li copra: il top-k porta i due
   pezzi ma la risposta può citarne uno solo;
-- sui riferimenti impliciti ("e per la oro?"): il vettore della domanda da sola non contiene il
-  turno precedente, perché qui non c'è memoria della conversazione.
+- sui riferimenti impliciti ("e per la oro?"): fino al Giorno 5 il vettore della domanda da sola
+  non conteneva il turno precedente. Dal Giorno 6 `AdviceRequest.history` porta gli ultimi turni al
+  riscrittore; senza `history` il limite resta.
+
+## Giorno 6 — chi sei e cosa puoi vedere
+```bash
+docker compose up -d
+uv run alembic upgrade head                  # app_users e document_chunks.visibility
+uv run python -m scripts.seed_users          # mbianchi/operator, grossi/compliance_lead, lverdi/risk_lead
+uv run uvicorn src.main:app --reload         # secondo terminale: API su http://localhost:8000
+uv run python -m scripts.ingest_docs         # terzo terminale: 13 file, livello dalla sottocartella
+uv run python -m scripts.valuta_rewrite      # riscrittore: senza vs con
+uv run python -m scripts.valuta_rewrite --storia   # estensione: senza vs con la storia
+uv run ruff check . && uv run mypy src scripts && uv run pytest
+```
+Il login restituisce un JWT di 30 minuti; ogni chiamata all'advisor porta
+`Authorization: Bearer <token>`. Le due funzioni seguenti evitano di copiare il token a mano:
+```bash
+login() { curl -s -X POST localhost:8000/api/auth/login \
+  -d "username=$1&password=bootcamp" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+MARCO=$(login mbianchi)
+GIULIA=$(login grossi)
+```
+La verifica del canarino usa la frase unica del documento riservato ("tre istruttorie su
+controparti ricorrenti", `data/docs/compliance_only/aml_controparti_venezuela.md`). La stessa
+domanda, due ruoli:
+```bash
+DOMANDA='{"question":"Quante istruttorie sono in corso sulle controparti venezuelane?"}'
+curl -s -X POST localhost:8000/api/ai/advice -H "Authorization: Bearer $MARCO" \
+  -H "Content-Type: application/json" -d "$DOMANDA"
+curl -s -X POST localhost:8000/api/ai/advice -H "Authorization: Bearer $GIULIA" \
+  -H "Content-Type: application/json" -d "$DOMANDA"
+```
+Marco (`operator`) non riceve la frase né una citazione `aml_controparti_venezuela`; Giulia
+(`compliance_lead`) la riceve e cita il documento. Entrambe le risposte mostrano `rewritten_query`,
+cioè cosa è stato cercato al posto dell'utente.
+
+### Misura della riscrittura
+`scripts/valuta_rewrite.py` usa un indice vero e le riscritture registrate nei due dataset, così il
+numero si rifà senza chiave API (`--rigenera` le produce col modello, se serve). Con `k=5` e
+soglia 0.35:
+
+| misura | senza | con | delta |
+|---|---|---|---|
+| 10 domande, riscrittore | doc@1 0.900, MRR 0.950, doc@5 1.000 | doc@1 1.000, MRR 1.000, doc@5 1.000 | doc@1 +0.100, MRR +0.050 |
+| 5 follow-up, storia | chunk@5 0.800, doc@1 0.200, MRR 0.500 | chunk@5 1.000, doc@1 0.800, MRR 0.900 | chunk@5 +0.200, doc@1 +0.600, MRR +0.400 |
+
+La riga delle 10 domande è la linea di partenza richiesta dalla prima mezz'ora; la riga dei 5
+follow-up è l'estensione. I follow-up grezzi (senza riscrittura) stanno a doc@5 0.400, quindi la
+storia non è un dettaglio: senza, la domanda ellittica non contiene il documento giusto.
+
+### Estensione scelta: la storia nel riscrittore
+- **Scelto**: `AdviceRequest.history` porta gli ultimi turni; `rewrite_cached` mette nella chiave
+  gli ultimi tre, così la riscrittura di una conversazione non si riusa in un'altra.
+- **Scartato**: la cache solo-domanda (restituisce la riscrittura di un'altra conversazione) e la
+  riscrittura senza storia (non risolve "e per quello di prima?").
+- **Numero**: sui 5 follow-up il MRR passa da 0.500 a 0.900, il chunk@5 da 0.800 a 1.000 e il
+  doc@1 da 0.200 a 0.800. Il prezzo è che la cache si riusa solo dentro la stessa conversazione.
 
 ## Demo di due minuti
-1. `uv run alembic upgrade head && uv run python -m scripts.ingest_docs` (10 documenti, 40 passaggi).
-2. `uv run uvicorn src.main:app --reload` in un secondo terminale.
-3. `curl -s -X POST localhost:8000/api/ai/advice -H "Content-Type: application/json" -d '{"question":"Quanto costa il bonifico istantaneo SEPA?"}'`:
-   risposta con `[fonte-N]` e citazione di `commissioni_bonifico`.
-4. La stessa chiamata con `{"question":"Qual è il tasso del mutuo agevolato per giovani coppie?"}`:
-   rifiuto, `citations: []`, `tokens_used: 0`.
-5. `uv run python -m scripts.valuta_retrieval --mode vector --soglia 0.35 --file data/eval/domande_g5_esatte.jsonl`
-   e poi `--mode hybrid --file data/eval/domande_g5_esatte.jsonl`: mostrare chunk@5 0.80 → 0.90
-   e doc@1 0.45 → 0.85.
-6. `uv run python -m scripts.prove_g5`: le quattro righe `PASS`.
+1. `docker compose up -d && uv run alembic upgrade head && uv run python -m scripts.seed_users`.
+2. `uv run uvicorn src.main:app --reload` in un secondo terminale, poi
+   `uv run python -m scripts.ingest_docs`.
+3. Login di Marco e Giulia con le due funzioni `login` qui sopra; stessa domanda canarino a
+   entrambi: Marco non vede la frase, Giulia sì, con le due liste di fonti accanto e
+   `rewritten_query` visibile in entrambe.
+4. Domanda con la storia:
+   `-d '{"question":"E per i clienti storici?","history":["Qual è il canone annuo della carta oro?"]}'`
+   e mostrare `rewritten_query` = "Qual è il canone annuo della carta di credito oro per i clienti
+   storici?".
+5. `uv run python -m scripts.valuta_rewrite && uv run python -m scripts.valuta_rewrite --storia`:
+   le due tabelle con i delta.
