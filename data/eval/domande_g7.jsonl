@@ -1,0 +1,15 @@
+{"id": "q01", "gruppo": "uno", "domanda": "Quanto c'è sul conto IT60X0542811101000000123?", "tool_attesi": ["get_account_balance"]}
+{"id": "q06", "gruppo": "multi", "domanda": "Il cliente C-10234 ha ricevuto un bonifico di 25.000 EUR dal Venezuela: controlla i conti, il saldo e i movimenti, verifica la policy e, se serve, apri una segnalazione.", "tool_attesi": ["find_customer_accounts", "get_account_balance", "list_recent_movements", "search_documents", "apri_segnalazione_compliance"]}
+{"id": "q11", "gruppo": "nessuno", "domanda": "Ciao, come stai?", "tool_attesi": []}
+{"id": "q02", "gruppo": "uno", "domanda": "Elenca gli ultimi movimenti del conto IT60X0542811101000000123.", "tool_attesi": ["list_recent_movements"]}
+{"id": "q07", "gruppo": "multi", "domanda": "Per il cliente C-10234, dimmi quali conti ha, quanto c'è sul principale e quali sono gli ultimi movimenti.", "tool_attesi": ["find_customer_accounts", "get_account_balance", "list_recent_movements"]}
+{"id": "q12", "gruppo": "nessuno", "domanda": "Chi sei e cosa puoi fare?", "tool_attesi": []}
+{"id": "q03", "gruppo": "uno", "domanda": "Quali conti ha il cliente C-10234?", "tool_attesi": ["find_customer_accounts"]}
+{"id": "q08", "gruppo": "multi", "domanda": "Sul conto IT60X0542811101000000123 ci sono movimenti sospetti verso il Venezuela? Controlla i movimenti, il saldo e la policy sulle segnalazioni.", "tool_attesi": ["list_recent_movements", "get_account_balance", "search_documents"]}
+{"id": "q13", "gruppo": "nessuno", "domanda": "Quanto fa 17 per 23?", "tool_attesi": []}
+{"id": "q04", "gruppo": "uno", "domanda": "Qual è la soglia oltre la quale un bonifico verso un paese a rischio elevato richiede una segnalazione?", "tool_attesi": ["search_documents"]}
+{"id": "q09", "gruppo": "multi", "domanda": "Il cliente C-10234 vuole fare un bonifico di 20.000 EUR verso un paese a rischio: controlla il saldo, i movimenti recenti e dimmi se la policy richiede una segnalazione.", "tool_attesi": ["find_customer_accounts", "get_account_balance", "list_recent_movements", "search_documents"]}
+{"id": "q14", "gruppo": "nessuno", "domanda": "Scrivi una poesia di due versi sul mare.", "tool_attesi": []}
+{"id": "q05", "gruppo": "uno", "domanda": "Quanto costa un bonifico istantaneo SEPA?", "tool_attesi": ["search_documents"]}
+{"id": "q10", "gruppo": "multi", "domanda": "Confronta il saldo del conto principale di C-10234 con i suoi ultimi movimenti e verifica se un bonifico da 25.000 EUR verso il Venezuela va segnalato.", "tool_attesi": ["find_customer_accounts", "get_account_balance", "list_recent_movements", "search_documents"]}
+{"id": "q15", "gruppo": "nessuno", "domanda": "Qual è la capitale dell'Australia?", "tool_attesi": []}

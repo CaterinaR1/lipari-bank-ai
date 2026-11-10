@@ -1,7 +1,7 @@
 # src/services/chat_service.py — la conversazione, con un modello che risponde e uno strumento
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -178,7 +178,7 @@ class ChatService:
 
     async def _pezzi(
         self, chat: ChatSession, domanda: str, messaggi: list[Message]
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         finale: LLMResponse | None = None
         parziale: list[str] = []
         try:

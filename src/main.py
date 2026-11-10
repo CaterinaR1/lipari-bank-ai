@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.api import accounts, advice, auth, categorize, chat, glossary, movements
+from src.api import accounts, advice, agent, auth, categorize, chat, glossary, movements
 from src.config import settings
 from src.exceptions import AppError, RateLimitError
 from src.types.error import ErrorResponse
@@ -171,7 +171,7 @@ app.include_router(movements.router)
 app.include_router(accounts.router)
 app.include_router(advice.router)
 app.include_router(auth.router)
-
+app.include_router(agent.router)
 app.state.limiter = advice.limiter
 
 @app.exception_handler(RateLimitExceeded)

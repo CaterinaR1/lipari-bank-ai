@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from config import Settings
+from src.config import Settings
 
 
 def test_env_example_matches_settings() -> None:

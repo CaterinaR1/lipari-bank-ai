@@ -139,3 +139,20 @@ class AppUser(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="operator")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=adesso)
+
+
+# ---- le segnalazioni, che l'unico tool che scrive apre
+
+
+class ComplianceAlert(Base):
+    __tablename__ = "compliance_alerts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    opened_by: Mapped[str] = mapped_column(String(64))  # username dal token
+    reason: Mapped[str] = mapped_column(Text)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )

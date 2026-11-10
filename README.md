@@ -418,3 +418,103 @@ storia non è un dettaglio: senza, la domanda ellittica non contiene il document
    storici?".
 5. `uv run python -m scripts.valuta_rewrite && uv run python -m scripts.valuta_rewrite --storia`:
    le due tabelle con i delta.
+
+## Giorno 7 — l'agente che usa i tool
+```bash
+docker compose up -d
+uv run alembic upgrade head
+uv run python -m scripts.seed_accounts
+uv run python -m scripts.seed_users
+uv run uvicorn src.main:app --reload        # API su http://localhost:8000
+# secondo terminale, a server avviato
+uv run python -m scripts.ingest_docs
+uv run python -m scripts.misura_g7 --limite 10
+uv run ruff check . && uv run mypy src scripts && uv run pytest
+```
+L'agente ha cinque tool: `find_customer_accounts`, `get_account_balance`,
+`list_recent_movements`, `search_documents` e `apri_segnalazione_compliance`. I tool nascono da
+`build_tools_for(user, deps)` e l'identità sta nella closure: il modello non può passare un altro
+utente. Il tool che scrive ricontrolla il portafoglio nel service, e la pratica è idempotente per
+conto, autore, giorno e importo.
+
+La differenza con una chat è strutturale: la chat fa una chiamata; l'agente ripete
+modello → tool → modello e termina per `model`, `max_steps` o `budget`. Un tool che solleva
+un'eccezione non diventa un 500: `_execute` la trasforma in un'osservazione `ERRORE...`, logga
+`tool_fallito` con il tipo e lascia al modello la scelta; un tool che scrive non lascia ricevuta se
+gli argomenti non sono validi. Le prove sono `test_un_tool_che_fallisce_diventa_osservazione` e
+`test_un_errore_di_un_tool_che_scrive_non_lascia_ricevuta`.
+
+### La misura di `max_steps`
+La misura live su 10 domande di `data/eval/domande_g7.jsonl`:
+
+| id | gruppo | passi | tool | uscita | costo EUR |
+|---|---|---|---|---|---|
+| q01 | uno | 2 | get_account_balance | model | 0.000300 |
+| q06 | multi | 10 | find_customer_accounts, get_account_balance ×2, list_recent_movements, search_documents ×4, apri_segnalazione_compliance | model | 0.003033 |
+| q11 | nessuno | 1 | — | model | 0.000147 |
+| q02 | uno | 2 | list_recent_movements | model | 0.000365 |
+| q07 | multi | 4 | find_customer_accounts, get_account_balance, list_recent_movements | model | 0.000831 |
+| q12 | nessuno | 1 | — | model | 0.000192 |
+| q03 | uno | 2 | find_customer_accounts | model | 0.000323 |
+| q08 | multi | 4 | list_recent_movements, get_account_balance, search_documents | model | 0.001000 |
+| q13 | nessuno | 1 | — | model | 0.000138 |
+| q04 | uno | 2 | search_documents | model | 0.000512 |
+
+Passi: minimo 1, mediana 2, massimo 10. Uscite: `model` 10/10. Il massimo è `q06`, la domanda
+multi-tool che ripete `search_documents` quattro volte; non è un numero scelto a occhio.
+
+- **Scelto: `MAX_STEPS=12`.** È il massimo osservato (10) più due passi di margine.
+- **Scartato: 8 e 20.** Con 8, `q06` si fermerebbe prima della risposta finale; con 20, un modello
+  che continua a chiedere tool avrebbe venti chiamate prima del muro.
+- **Lo so da:** la misura live di `q06` (10 passi) e
+  `tests/unit/test_g7.py::test_la_traccia_ricostruisce_il_run_e_la_pratica` (7 passi, 6 tool call).
+
+### Estensione scelta: il budget si stima prima della chiamata
+- **Scelto:** prima di ogni giro il loop stima input (messaggi più schemi dei tool, con margine di
+  128 token) e output al tetto di 500 token; se `cost_eur + previsto > budget_eur`, si ferma con
+  `stopped_by="budget"` senza chiamare il modello.
+- **Scartato:** controllare solo dopo la chiamata, che pagherebbe comunque il giro che sfonda il
+  tetto.
+- **Lo so da:** `test_il_budget_si_ferma_prima_della_chiamata` prova tre soglie (`0.001`, `0.01`,
+  `0.05`) con un messaggio enorme: zero chiamate, `steps=0`, costo zero. Resta dichiarato
+  l'overshoot residuo: la stima non è una misura, quindi una singola chiamata può ancora superare
+  il tetto; il test esistente lo verifica con `run.cost_eur > BUDGET_PER_RUN`.
+
+### Le prove di quello che non deve accadere
+```bash
+# 1. conto altrui in chiaro nella domanda: due rifiuti, nessun dato nel log
+uv run pytest "tests/unit/test_g7.py::test_il_muro_regge_con_l_iban_altrui_nella_domanda" -q
+# 2. tetto dei passi: risposta assente, non una risposta inventata
+uv run pytest "tests/unit/test_g7.py::test_tetto_raggiunto_non_e_una_risposta" -q
+# 3. budget: la chiamata non parte
+uv run pytest "tests/unit/test_g7_estensione.py::test_il_budget_si_ferma_prima_della_chiamata" -q
+# 4. traccia: run e pratica ricostruibili, senza IBAN, importi o nomi
+uv run pytest "tests/unit/test_g7.py::test_la_traccia_ricostruisce_il_run_e_la_pratica" -q
+# 5. idempotenza: due richieste uguali, una sola pratica
+uv run pytest "tests/unit/test_g7.py::test_due_segnalazioni_uguali_fanno_una_riga" -q
+```
+
+### Demo di due minuti
+Con il server avviato e il corpus ingerito:
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/api/auth/login \
+  -d "username=mbianchi&password=bootcamp" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -s -X POST localhost:8000/api/ai/agent \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"message":"Il cliente C-10234 ha ricevuto un bonifico di 25.000 EUR dal Venezuela: controlla i conti, il saldo e i movimenti, verifica la policy e, se serve, apri una segnalazione."}'
+```
+Nella prova del 2026-11-10 la risposta ha `steps=10`, `stopped_by=model`,
+`cost_eur=0.003033` e la ricevuta della pratica
+`e03952bf-f2b8-4f18-bdd8-efced8236d44` sul conto `IT60X0542811101000000123`, aperta da
+`mbianchi` con importo `25000.00`. Rieseguendo la stessa domanda nello stesso giorno la pratica non
+si duplica: la chiave di idempotenza comprende conto, autore, data e importo.
+
+Poi il muro: la stessa richiesta sul conto di Anna Greco
+(`IT60X0542811101000000789`) risponde 200 con `NON_DISPONIBILE`, `steps=2`,
+`stopped_by=model`, costo `0.00032242`, `run_id=f0d2a3c7-d03d-44c4-9bb5-2aa3f7049f50`; nel log
+compare `tool_accesso_negato` con l'impronta dell'IBAN, non l'IBAN. La traccia strutturata
+(`agent_step` e `agent_run`) è verificata nei test con `caplog`: il server non ha un formatter JSON,
+quindi gli `extra` non compaiono nel formato standard del log. La risposta al client espone già
+`run_id`, `steps`, `tool_calls`, `stopped_by` e `cost_eur`; il dettaglio completo del percorso è in
+`docs/vibe-coding/G7.md` e il rilievo di concorrenza non corretto è in `docs/ai-review/G7.md`.

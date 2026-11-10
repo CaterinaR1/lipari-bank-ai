@@ -23,7 +23,7 @@ from src.llm.factory import get_llm_provider
 from src.llm.openai_provider import OpenAIProvider
 from src.llm.prompt import load_prompt
 from src.llm.tools import TOOLS_SCHEMA
-from src.llm.types import LLMResponse, Message, ToolCall
+from src.llm.types import LLMResponse, Message, ToolCall, ToolSpec
 from src.main import app
 from src.observability.cost_tracker import CostTracker
 from src.services.categorize_service import CategorizeService
@@ -65,6 +65,11 @@ def override_ripristinati() -> Iterator[None]:
 
 class ProviderAPezzi:
     """Manda i pezzi uno alla volta: serve a chiudere lo stream a metà."""
+
+    async def complete(
+        self, messages: list[Message], max_tokens: int = 500, tools: list[ToolSpec] | None = None
+    ) -> LLMResponse:
+        raise NotImplementedError
 
     async def stream(
         self, messages: list[Message], max_tokens: int = 500
