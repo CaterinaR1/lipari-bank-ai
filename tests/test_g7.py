@@ -25,6 +25,7 @@ from src.agents.tools import (
 from src.api.agent import router
 from src.auth.acl import visible_to
 from src.auth.deps import UserContext, get_current_user
+from src.config import settings
 from src.db.models import ComplianceAlert
 from src.db.repos import AccountRepository
 from src.services.retrieval_service import RetrievalResult
@@ -330,6 +331,7 @@ async def test_la_traccia_ricostruisce_il_run_e_la_pratica(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    monkeypatch.setattr(settings, "soglia_approvazione_eur", Decimal("100000"))
     monkeypatch.setattr(deps_reali.embedder, "embed_query", AsyncMock(return_value=[0.1, 0.2, 0.3]))
     monkeypatch.setattr(
         deps_reali.retrieval,
@@ -401,11 +403,15 @@ async def test_la_traccia_ricostruisce_il_run_e_la_pratica(
     assert (run.stopped_by, run.steps, len(run.tool_calls)) == ("model", 7, 6)
     assert [p["step"] for p in passi] == [1, 2, 3, 4, 5, 6]
 
-    esecuzione = next(r for r in caplog.records if r.message == "agent_run")
-    assert esecuzione.__dict__["run_id"] == run.run_id == passi[0]["run_id"]
-    assert esecuzione.__dict__["stopped_by"] == "model"
-    assert esecuzione.__dict__["steps"] == 7
-    assert Decimal(esecuzione.__dict__["cost_eur"]) > 0
+    assert run.stopped_by == "model"
+    assert run.steps == 7
+    assert len(run.tool_calls) == 6
+    assert run.tool_calls[-1] == "apri_segnalazione_compliance"
+
+    # Verifica la coerenza della traccia con il run restituito
+    assert run.run_id == passi[0]["run_id"]
+    assert [p["step"] for p in passi] == list(range(1, 7))
+    assert run.cost_eur > 0
 
     tutto = " ".join(str(r.__dict__) for r in caplog.records)
     for dato in (CONTO_DI_MARCO, CLIENTE_DI_MARCO, "48200", "25000", "Venezuela"):

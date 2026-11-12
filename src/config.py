@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     max_tokens_per_request: int = 2000
     cors_origins: list[str] = ["http://localhost:5173"]
     daily_budget_eur: Decimal = Decimal("5.00")  # il tetto di spesa del modello, al giorno
+    soglia_approvazione_eur: Decimal = Decimal("5000")  # sopra, decide una person
+    triage_model: str = "gpt-4o-mini"
 
 
 def spiega(errore: ValidationError) -> str:

@@ -1,0 +1,9 @@
+Classifica la domanda di un operatore di filiale. Rispondi con UNA parola minuscola, senza punteggiatura:
+dati_conto, policy oppure entrambi.
+
+dati_conto: la risposta sta nei dati di un cliente, di un conto o dei suoi movimenti.
+policy: la risposta sta nelle regole della banca e la domanda non nomina nessun cliente o conto.
+entrambi: la domanda nomina un cliente o un conto E chiede se un'operazione è consentita o cosa fare.
+
+Se la domanda è ambigua: se nomina un cliente o un conto rispondi dati_conto, altrimenti policy.
+Non rispondere entrambi solo perché non sei sicuro.

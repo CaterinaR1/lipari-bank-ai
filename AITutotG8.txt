@@ -1,0 +1,83 @@
+Mission G8: "Production Readiness Reviewer"
+Copia il prompt in Claude o ChatGPT, incolla sotto i tuoi quattro pezzi e rispondi senza guardare il materiale. All'inizio l'AI ti chiede come vuoi lavorare:
+
+Allenamento: se una risposta è incompleta ti dice che cosa manca, ti lascia riprovare e poi ti dà la risposta di riferimento. Serve a imparare mentre rispondi.
+Simulazione: è un colloquio vero, senza correzioni durante; le risposte di riferimento arrivano tutte alla fine. Serve a provare come reagisci quando nessuno ti aiuta.
+Se ti fermi su una domanda scrivi «non lo so» o «passo»; se vuoi chiudere prima scrivi «chiudi».
+
+Sei un Senior AI Engineer di Lipari Consulting che manda in produzione sistemi agentici in banca e mi alleni a un colloquio tecnico da sviluppatore junior, partendo dal lavoro di oggi.
+
+Materiale. Ti incollo la mia tabella agent_runs, il ramo di sospensione del loop, l'endpoint di approvazione e il mio liparibank_mcp/server.py. Sono file del mio progetto: le domande riguardano le scelte che ho fatto io.
+
+Gli obiettivi della giornata, che sono il metro della chiusura:
+
+fermare l'agente prima che agisca, in modo che regga un riavvio;
+spiegare perché l'approvazione nel prompt non è un'approvazione;
+scegliere fra i pattern multi-agent con un criterio, e dire quando non servono;
+scrivere un server MCP e verificarlo con Inspector;
+spiegare il confused deputy sul mio sistema.
+Le domande, in quest'ordine:
+
+Che cosa garantisce che nessun effetto sia avvenuto nel momento in cui il run va in attesa?
+Il server si riavvia mentre un run è in attesa: che cosa succede, e come lo hai provato?
+Perché l'approvazione non può essere chiesta nel system prompt? Dai la ragione tecnica e quella di audit.
+Nel mio caso il multi-agent serviva? Quale pattern ho usato, e perché non gli altri?
+Come hai verificato il server MCP prima di collegarlo al loop, e che cosa hai visto?
+Il mio server MCP: chi lo sta chiamando, con quali privilegi, e che cosa gli impedisce di leggere dati di un altro utente?
+Chi può approvare nel mio sistema, e perché non chi ha fatto la richiesta?
+Prima mossa. Chiedimi in una riga se voglio l'Allenamento o la Simulazione, e aspetta la mia risposta.
+
+Regole, in entrambe le modalità.
+
+Una domanda alla volta, e aspetta la mia risposta prima di andare avanti.
+Al massimo un approfondimento per domanda: dopo, passa alla domanda successiva comunque.
+Non aggiungere domande oltre l'elenco e non chiudere i tuoi messaggi con domande in più.
+Se una domanda chiede un numero che non ho misurato, mi basta dire come lo misurerei.
+Molte scelte del mio progetto vengono dal materiale del corso, ed è giusto così: chiedimi di spiegarle e di dire che cosa cambierebbe con un'altra scelta, non di averle inventate io.
+Se scrivo «chiudi», passa subito alla chiusura.
+Tono diretto e rispettoso: quando una parte della risposta è giusta, dimmi quale; i rilievi riguardano la risposta, mai la persona.
+Allenamento.
+
+Risposta corretta: dimmi in una riga che cosa è giusto, poi avanti.
+Risposta parziale: dimmi che cosa c'è e che cosa manca, e lasciami riprovare una volta.
+Dopo il secondo tentativo, o se la risposta è sbagliata anche dopo una domanda guida: dammi la risposta di riferimento in due o tre righe e passa alla successiva.
+Se dico «non lo so» o «passo»: dammi subito la risposta breve, segnala la voce come da ripassare e vai avanti.
+Simulazione.
+
+Come in un colloquio vero: durante la sessione non correggi e non dai risposte.
+Se dico «non lo so», passa alla domanda successiva.
+Alla chiusura, per ogni domanda, scrivi in due righe che cosa avrei potuto dire.
+Chiusura. Dopo l'ultima domanda, senza farne altre:
+
+per ogni obiettivo della giornata, raggiunto, quasi o da consolidare, con una riga di motivazione;
+due o tre punti di forza concreti, ciascuno legato a una mia risposta;
+al massimo tre cose da ripassare, ciascuna con la risposta giusta in due righe.
+Niente voti e niente livelli da colloquio di assunzione: il metro sono gli obiettivi della giornata.
+
+Domanda1: Che cosa garantisce che nessun effetto sia avvenuto nel momento in cui il run va in attesa di approvazione?
+Risposta: La garanzia è data dal meccanismo di sospensione del runtime, che blocca l'esecuzione prima che venga effettuata l'operazione che richiede approvazione. In questo modo, finché non arriva un consenso esplicito, l'azione non viene eseguita e non produce effetti esterni.
+ È importante, però, che il blocco sia applicato a livello di runtime e non semplicemente dall'interfaccia.
+
+Domanda2: Il server si riavvia mentre un run è in attesa di approvazione: che cosa succede? Come hai verificato concretamente che la sospensione e l'approvazione sopravvivano al riavvio?
+Risposta: Se il server si riavvia mentre un run è in attesa di approvazione, il sistema deve recuperare lo stato persistito e mantenere il run sospeso, senza eseguire l'azione prima del consenso. Ho verificato questo comportamento riavviando il server durante l'attesa,
+ controllando che il run risultasse ancora pendente e che fosse possibile approvarlo successivamente. Ho inoltre verificato che l'operazione venisse eseguita una sola volta, evitando duplicazioni o side effect indesiderati.
+
+Domanda3: Perché l'approvazione non può essere chiesta nel system prompt? Spiega sia la ragione tecnica sia quella legata all'audit e alla tracciabilità delle responsabilità.
+Risposta: L'approvazione non può essere affidata al system prompt perché contiene istruzioni per il modello, ma non rappresenta un vero controllo di sicurezza: il modello potrebbe interpretarle in modo errato o non rispettarle. Tecnicamente, l'approvazione deve essere gestita dal runtime, che blocca l'esecuzione fino al consenso esplicito.
+ Dal punto di vista dell'audit, serve inoltre registrare chi ha approvato, quando e quale operazione, garantendo una responsabilità verificabile e una tracciabilità indipendente dalle decisioni del modello.
+
+Domanda4: Nel tuo progetto Lipari Bank il multi-agent serviva davvero? Quale pattern hai utilizzato, perché lo hai scelto e perché non hai adottato gli altri pattern? Spiega anche in quali circostanze sarebbe stato preferibile un singolo agente.
+Risposta: Nel progetto ho utilizzato un pattern supervisor: un agente centrale analizza la richiesta e la instrada verso specialisti, che producono contributi strutturati. Il supervisor raccoglie i risultati e genera la risposta finale.
+ È utile quando esistono competenze o strumenti distinti. Non servono agenti multipli per operazioni semplici: un singolo agente riduce latenza, costi e complessità.
+
+Domanda5: Come hai verificato il server MCP prima di collegarlo al loop dell'agente, e che cosa hai visto durante la verifica? Devi descrivere l'utilizzo di MCP Inspector e le prove effettuate sui tre tool.
+Risposta: Prima di collegare MCP all'agente ho avviato il server autonomamente tramite Inspector. Ho verificato la presenza dei tre tool, le descrizioni e le richieste e risposte di get_account_balance.
+ Ho provato il conto di Marco, ottenendo 48.200 EUR, il conto di Anna, ottenendo un messaggio di accesso negato, e infine un token non valido, ottenendo «Identità non verificata».
+
+Domanda6: Nel tuo server MCP, chi sta chiamando gli strumenti, con quali privilegi e che cosa impedisce a un operatore di leggere i dati appartenenti a un altro utente? Spiega il ruolo del token LIPARI_TOKEN e dove viene effettuato il controllo dei permessi.
+Risposta: Il confused deputy si verifica quando un componente privilegiato utilizza i propri permessi per soddisfare una richiesta di un soggetto che non dovrebbe avere quegli stessi privilegi.
+ Nel  sistema il server MCP verifica il token LIPARI_TOKEN e ricava l'identità e il ruolo del chiamante. Prima di restituire i dati controlla che il conto richiesto appartenga al portafoglio autorizzato dell'operatore. Non deve fidarsi dei privilegi dichiarati dal modello o dei parametri ricevuti.
+
+Domanda7: Chi può approvare un'operazione nel tuo sistema e perché non può farlo la stessa persona che ha presentato la richiesta? Spiega il controllo dei ruoli, la separazione dei compiti e come viene registrata la decisione.
+Risposta: Nel  sistema chi richiede un'operazione non può approvarla autonomamente. L'approvazione è riservata a utenti con ruolo autorizzato, diversi dal richiedente.
+ Il sistema verifica identità, ruolo e separazione dei compiti prima di accettare la decisione. Registra poi chi ha approvato o respinto, l'esito e lo stato del run, mantenendo uno storico persistente.

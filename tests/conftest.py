@@ -13,6 +13,7 @@ from src.agents.deps import Deps
 from src.auth.deps import UserContext
 from src.db.models import Account, Base, Customer, Movement
 from src.db.repos import AccountRepository, MovementRepository
+from src.db.runs import RunRepository
 from src.services.alerts import AlertService
 from src.services.retrieval_service import RetrievalService
 from tests.finti import embedder_finto
@@ -21,7 +22,7 @@ CLIENTE_DI_MARCO = "C-10234"  # nel portafoglio di mbianchi
 CLIENTE_ALTRUI = "C-20417"  # nel portafoglio di un collega, pgalli
 CONTO_DI_MARCO = "IT60X0542811101000000123"
 CONTO_ALTRUI = "IT60X0542811101000000789"
-TABELLE_DEL_GIORNO = ["customers", "accounts", "movements", "compliance_alerts"]
+TABELLE_DEL_GIORNO = ["customers", "accounts", "movements", "compliance_alerts", "agent_runs"]
 
 
 def risposta(
@@ -110,6 +111,7 @@ def deps_reali(session: AsyncSession) -> Deps:
         accounts=AccountRepository(session),
         movements=MovementRepository(session),
         alerts=AlertService(session),
+        runs=RunRepository(session),
         retrieval=RetrievalService(session),
         embedder=embedder_finto(),
         openai=AsyncMock(),

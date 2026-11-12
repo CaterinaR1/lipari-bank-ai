@@ -518,3 +518,53 @@ compare `tool_accesso_negato` con l'impronta dell'IBAN, non l'IBAN. La traccia s
 quindi gli `extra` non compaiono nel formato standard del log. La risposta al client espone già
 `run_id`, `steps`, `tool_calls`, `stopped_by` e `cost_eur`; il dettaglio completo del percorso è in
 `docs/vibe-coding/G7.md` e il rilievo di concorrenza non corretto è in `docs/ai-review/G7.md`.
+
+## Giorno 8 — approvazione, supervisor, server MCP
+
+### Come si lancia
+docker compose up -d && uv run alembic upgrade head && uv run python -m scripts.seed_accounts
+uv run python -m scripts.seed_users
+uv run uvicorn src.main:app --reload
+uv run ruff check . && uv run mypy src tests liparibank_mcp scripts && uv run pytest
+# server MCP, da provare da solo prima di collegarlo a un agente:
+npx @modelcontextprotocol/inspector -e LIPARI_TOKEN=<token> uv run python -m liparibank_mcp.server
+
+### Cosa fa
+- POST /api/ai/agent: se un tool che scrive supera la soglia (SOGLIA_APPROVAZIONE_EUR, oggi 5000)
+  o non ha importo, il run si ferma PRIMA che parta qualunque tool di quel passo, salva lo stato nel
+  database (tabella agent_runs) e risponde stopped_by="awaiting_approval".
+- GET /api/ai/agent/{id}, POST .../approve e .../reject: la decisione è di compliance_lead o
+  risk_lead, mai di chi ha chiesto. Alla ripresa i tool si rifanno per chi ha chiesto.
+- POST /api/ai/supervisor: triage + al massimo due specialisti (dati_conto, policy) + sintesi.
+  Nessuno specialista ha il tool che scrive: le azioni restano sull'endpoint dell'agente.
+- liparibank_mcp/server.py: tre tool in sola lettura (search_policy, find_customer_accounts,
+  get_account_balance), che riusano gli stessi tool dell'agente, quindi lo stesso muro del portafoglio.
+
+### Decisioni, e come lo so
+1. Lo stato del run sta nel database, non in memoria. Scartato: un dizionario nel processo, che un
+   riavvio cancella. Lo so da un test che approva da un altro processo Python (test_g8), e da una
+   prova a mano: [run sospeso, server riavviato, approvazione riuscita: SÌ/NO].
+2. La decisione si scrive con un UPDATE condizionato allo stato "in attesa", non con «leggi e poi
+   scrivi». Scartato: il controllo in Python, che con due clic insieme li lascia passare entrambi.
+   Lo so da un test con due richieste in parallelo: una 200 e una 409, una sola segnalazione.
+3. La regola è chiusa per default: un tool che scrive e non dichiara quando non serve l'approvazione
+   la richiede sempre. Scartato: l'elenco dei tool "da proteggere", che dimentica il tool nuovo.
+   Lo so da test_g7: un vecchio test con importo sopra soglia ha smesso di partire.
+4. La soglia sta in configurazione e nel codice, non nel prompt. Lo so dall'esperimento 4 della
+   Prompting Clinic: [il tool è partito con «confermo già adesso»: SÌ/NO, n volte su n].
+5. Il server MCP non riceve l'identità come parametro: la riceve come token firmato nell'ambiente e
+   la verifica a ogni chiamata. Lo so da tre test: token vuoto, non valido e firmato con un altro
+   segreto sono respinti.
+
+### Costo e tempi
+Stessa domanda su /agent e /supervisor: agent [passi, chiamate, costo]; supervisor [chiamate, costo].
+Con un modello gratuito il costo è 0: confronto fatto sul numero di chiamate e di token.
+
+### Limiti noti
+- Un run in attesa non scade e nessuno viene avvisato: resta lì finché qualcuno non lo trova.
+- Il token per il server MCP sta nell'ambiente del processo e vale 30 minuti: poi il server
+  risponde «Identità non verificata» finché non si rilancia con un token nuovo.
+- Con un modello che ragiona prima di rispondere, il triage (max_tokens=5) può non dare nessuna
+  parola: il codice prende allora la strada prudente, "entrambi", che costa due specialisti.
+- Le decisioni stanno in una colonna JSON: si leggono dall'endpoint di stato, non si interrogano
+  con una query.

@@ -8,6 +8,7 @@ from src.agents.deps import Deps
 from src.agents.registry import Tool, impronta
 from src.auth.acl import visible_to
 from src.auth.deps import UserContext
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,12 @@ def build_tools_for(user: UserContext, deps: Deps) -> list[Tool]:
             "l'utente lo chiede o se la policy recuperata la rende obbligatoria.",
             SegnalazioneArgs,
             segnalazione,
+            # sopra soglia, o senza importo, decide una persona
+            serve_approvazione=_sopra_soglia,
             senza_dati=SENZA_DATI,
         ),
     ]
+
+def _sopra_soglia(a: SegnalazioneArgs) -> bool:
+    """Un importo che non c'è non è un importo piccolo: nel dubbio si chiede."""
+    return a.importo is None or a.importo > settings.soglia_approvazione_eur
