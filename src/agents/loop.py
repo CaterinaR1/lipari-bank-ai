@@ -29,6 +29,8 @@ PREZZI_PER_1K = {  # euro per mille token (ingresso, uscita), come nel provider
     "gpt-4o-mini": (Decimal("0.00014"), Decimal("0.00056")),
     "gpt-4o": (Decimal("0.0023"), Decimal("0.0091")),
     "openai/gpt-oss-120b": (Decimal("0.0001"), Decimal("0.0011")),
+    # Groq: 0,10/0,50 USD per 1M token, il modello piccolo del triage
+    "openai/gpt-oss-20b": (Decimal("0.00009"), Decimal("0.00046")),
 }
 SENZA_APPROVAZIONE = (
     "Questa azione richiede l'approvazione di un responsabile, e da qui non si può chiedere: "

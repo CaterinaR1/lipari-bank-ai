@@ -15,6 +15,7 @@ from src.llm.stima import costo_stimato
 from src.llm.tools import TOOLS_SCHEMA, costruisci_strumenti
 from src.llm.types import LLMResponse, Message
 from src.observability.cost_tracker import CostTracker
+from src.observability.ledger import CostLedger
 from src.types.chat import ChatRequest, ChatResponse, ToolCallInfo
 
 FINESTRA = 20  # quanti messaggi di storia entrano nel prompt
@@ -77,6 +78,13 @@ class ChatService:
             tokens=risposta.tokens_used,
             cost_eur=risposta.cost_eur,
             model_used=risposta.model,
+        )
+        CostLedger(self.session).aggiungi(  # il costo anche nel registro
+            endpoint="chat",
+            username=chat.user_id,
+            model=risposta.model,
+            tokens=risposta.tokens_used,
+            cost_eur=risposta.cost_eur,
         )
         await self.session.commit()  # una volta, a lavoro finito: le due scritture valgono insieme
 

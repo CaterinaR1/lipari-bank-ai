@@ -50,7 +50,10 @@ async def tabelle_vuote() -> AsyncIterator[None]:
     await engine.dispose()  # le connessioni dei TestClient degli altri test: via dal pool
     async with engine.begin() as c:
         await c.execute(
-            text("TRUNCATE chat_messages, chat_sessions, movements, accounts, customers CASCADE")
+            text(
+                "TRUNCATE chat_messages, chat_sessions, movements, accounts, customers, "
+                "llm_calls CASCADE"
+            )
         )
     yield
 

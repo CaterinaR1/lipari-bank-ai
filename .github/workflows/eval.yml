@@ -1,0 +1,44 @@
+﻿name: eval
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lipari
+          POSTGRES_PASSWORD: lipari
+          POSTGRES_DB: lipari_ai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lipari -d lipari_ai"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lipari:lipari@localhost:5432/lipari_ai
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      JWT_SECRET: eval-secret-jwt-key-at-least-32-characters-long
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync
+      - name: Migrate database
+        run: uv run alembic upgrade head
+      - name: Seed accounts
+        run: uv run python -m scripts.seed_accounts
+      - name: Ingest eval fixtures
+        run: uv run python -m evals.ingest_fixtures
+      - name: Run evals
+        run: uv run python -m evals.runner

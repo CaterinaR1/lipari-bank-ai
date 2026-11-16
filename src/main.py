@@ -14,11 +14,13 @@ from pydantic import BaseModel
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.api import accounts, advice, agent, auth, categorize, chat, glossary, movements
+from src.api import accounts, admin, advice, agent, auth, categorize, chat, glossary, movements
 from src.config import settings
 from src.exceptions import AppError, RateLimitError
+from src.observability.json_log import configura_log, request_id
 from src.types.error import ErrorResponse
 
+configura_log()
 logger = logging.getLogger(__name__)
 ID_VALIDO = re.compile(r"[A-Za-z0-9-]{8,64}")
 
@@ -124,6 +126,7 @@ async def handle_unexpected(req: Request, exc: Exception) -> JSONResponse:
     )
 
 
+
 @app.middleware("http")
 async def add_request_id(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -131,11 +134,15 @@ async def add_request_id(
     # Se il chiamante ne manda uno, lo stesso id attraversa i due sistemi; se non lo manda,
     # o manda qualcosa che non ha la forma di un id, se ne genera uno nuovo.
     ricevuto = request.headers.get("X-Request-Id", "")
-    request_id = ricevuto if ID_VALIDO.fullmatch(ricevuto) else str(uuid.uuid4())
-    request.state.request_id = request_id  # lo legge l'handler del 500
+    rid = ricevuto if ID_VALIDO.fullmatch(ricevuto) else str(uuid.uuid4())
+
+    request_id.set(rid)  # Da qui ogni riga di log di questa richiesta lo porta
+    request.state.request_id = rid  # Lo legge l'handler del 500
+
     inizio = time.perf_counter()
     response = await call_next(request)
-    response.headers["X-Request-Id"] = request_id
+
+    response.headers["X-Request-Id"] = rid
     response.headers["X-Process-Time"] = f"{time.perf_counter() - inizio:.4f}"
     return response
 
@@ -147,6 +154,7 @@ app.add_middleware(  # registrato per ultimo: è il più esterno
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
 )
+
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -172,6 +180,7 @@ app.include_router(accounts.router)
 app.include_router(advice.router)
 app.include_router(auth.router)
 app.include_router(agent.router)
+app.include_router(admin.router)
 app.state.limiter = advice.limiter
 
 @app.exception_handler(RateLimitExceeded)

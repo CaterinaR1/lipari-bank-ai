@@ -47,7 +47,7 @@ Le operazioni verso il Venezuela seguono le regole dei bonifici extra-SEPA: cost
 async def indice_vuoto() -> AsyncIterator[None]:
     await engine.dispose()  # le connessioni dei TestClient degli altri test: via dal pool
     async with engine.begin() as c:
-        await c.execute(text("TRUNCATE document_chunks, chat_messages, chat_sessions CASCADE"))
+        await c.execute(text("TRUNCATE document_chunks, chat_messages, chat_sessions, llm_calls"))
     yield
 
 

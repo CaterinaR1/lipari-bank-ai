@@ -19,6 +19,7 @@ from src.llm.factory import get_embedder, get_llm_provider
 from src.llm.prompt import load_prompt
 from src.llm.rewriter import QueryRewriter
 from src.observability.cost_tracker import CostTracker
+from src.observability.ledger import CostLedger
 from src.services.ingest_service import IngestService
 from src.services.rag_service import RAGService
 from src.services.retrieval_service import RetrievalService
@@ -81,10 +82,17 @@ async def advice(
     repo = ChatRepository(session)
     await CostTracker(repo, settings.daily_budget_eur).verifica()
     esito = await service.advise(req.question, user, req.history)
-    if esito.tokens_used or esito.cost_eur:
-        await repo.add_cost("advice", esito.tokens_used, Decimal(str(esito.cost_eur)), esito.model)
-        await session.commit()
+    # la generazione nel registro; la riscrittura no: il suo costo non arriva nella risposta
+    CostLedger(session).aggiungi(
+        endpoint="advice",
+        username=user.username,
+        model=esito.model or settings.default_model,
+        tokens=esito.tokens_used,
+        cost_eur=Decimal(str(esito.cost_eur)),  # dal float: Decimal(str(...)), non Decimal(float)
+    )
+    await session.commit()
     return esito
+
 
 
 @router.post("/documents/ingest", response_model=IngestResponse)

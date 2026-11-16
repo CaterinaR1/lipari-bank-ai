@@ -85,7 +85,7 @@ async def test_il_loop_dell_agente_usa_il_server_senza_cambiare(
     monkeypatch.setattr("src.agents.deps.get_embedder", embedder_finto)
     monkeypatch.setattr("src.agents.deps.get_openai", AsyncMock)
     async with engine.begin() as conn:  # nessun documento: la risposta attesa è «niente»
-        await conn.execute(text("TRUNCATE document_chunks"))
+        await conn.execute(text("TRUNCATE document_chunks, llm_calls"))
     modello = AsyncMock()
     modello.chat.completions.create.side_effect = [
         risposta(tool="search_policy", argomenti='{"query": "soglie paesi a rischio"}'),

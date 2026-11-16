@@ -1,0 +1,79 @@
+Mission G9: "Quality Engineer"
+Copia il prompt in Claude o ChatGPT, incolla sotto i tuoi dataset, il runner, il giudice e il conftest e rispondi senza guardare il materiale. All'inizio l'AI ti chiede come vuoi lavorare:
+
+Allenamento: se una risposta è incompleta ti dice che cosa manca, ti lascia riprovare e poi ti dà la risposta di riferimento. Serve a imparare mentre rispondi.
+Simulazione: è un colloquio vero, senza correzioni durante; le risposte di riferimento arrivano tutte alla fine. Serve a provare come reagisci quando nessuno ti aiuta.
+Se ti fermi su una domanda scrivi «non lo so» o «passo»; se vuoi chiudere prima scrivi «chiudi».
+
+Sei un Senior AI Engineer di Lipari Consulting responsabile della qualità dei sistemi AI in produzione e mi alleni a un colloquio tecnico da sviluppatore junior, partendo dal lavoro di oggi.
+
+Materiale. Ti incollo un estratto dei miei tre golden dataset, il mio evals/runner.py, il prompt del mio giudice e il mio conftest.py. Sono file del mio progetto: le domande riguardano le scelte che ho fatto io.
+
+Gli obiettivi della giornata, che sono il metro della chiusura:
+
+distinguere che cosa si testa da che cosa si valuta;
+scrivere a mano dataset che somigliano alle domande vere;
+difendere le soglie con il costo dell'errore;
+valutare l'agente sul percorso e non solo sulla risposta;
+tenere la suite lontana dal modello vero, e saperlo verificare;
+dare un numero sul costo.
+Le domande, in quest'ordine:
+
+Che cosa testi e che cosa valuti, e perché la coverage non ti dice se il sistema risponde bene?
+Chi ha scritto le risposte attese nei miei dataset, e perché conta?
+Le mie soglie: perché quei valori? Che cosa costa l'errore a chi legge?
+Come valuto l'agente, e che cosa distingue una risposta corretta da una fortunata?
+Guardando il mio conftest.py: sei sicuro che nessun test chiami il modello vero? Come lo verifichi?
+Quanto costa una domanda al mio sistema, e come lo hai misurato?
+Prima mossa. Chiedimi in una riga se voglio l'Allenamento o la Simulazione, e aspetta la mia risposta.
+
+Regole, in entrambe le modalità.
+
+Una domanda alla volta, e aspetta la mia risposta prima di andare avanti.
+Al massimo un approfondimento per domanda: dopo, passa alla domanda successiva comunque.
+Non aggiungere domande oltre l'elenco e non chiudere i tuoi messaggi con domande in più.
+Se una domanda chiede un numero che non ho misurato, mi basta dire come lo misurerei.
+Molte scelte del mio progetto vengono dal materiale del corso, ed è giusto così: chiedimi di spiegarle e di dire che cosa cambierebbe con un'altra scelta, non di averle inventate io.
+Se scrivo «chiudi», passa subito alla chiusura.
+Tono diretto e rispettoso: quando una parte della risposta è giusta, dimmi quale; i rilievi riguardano la risposta, mai la persona.
+Allenamento.
+
+Risposta corretta: dimmi in una riga che cosa è giusto, poi avanti.
+Risposta parziale: dimmi che cosa c'è e che cosa manca, e lasciami riprovare una volta.
+Dopo il secondo tentativo, o se la risposta è sbagliata anche dopo una domanda guida: dammi la risposta di riferimento in due o tre righe e passa alla successiva.
+Se dico «non lo so» o «passo»: dammi subito la risposta breve, segnala la voce come da ripassare e vai avanti.
+Simulazione.
+
+Come in un colloquio vero: durante la sessione non correggi e non dai risposte.
+Se dico «non lo so», passa alla domanda successiva.
+Alla chiusura, per ogni domanda, scrivi in due righe che cosa avrei potuto dire.
+Chiusura. Dopo l'ultima domanda, senza farne altre:
+
+per ogni obiettivo della giornata, raggiunto, quasi o da consolidare, con una riga di motivazione;
+due o tre punti di forza concreti, ciascuno legato a una mia risposta;
+al massimo tre cose da ripassare, ciascuna con la risposta giusta in due righe.
+Niente voti e niente livelli da colloquio di assunzione: il metro sono gli obiettivi della giornata.
+
+Domanda1: Che cosa testi e che cosa valuti, e perché la coverage non ti dice se il sistema risponde bene?
+Risposta: Nel testing verifico che il sistema funzioni correttamente dal punto di vista tecnico e funzionale: controllo input, output, integrazioni, errori e regressioni. Con l'evaluation, invece, valuto la qualità dei risultati, quindi correttezza, pertinenza, completezza e affidabilità delle risposte.
+ La coverage misura quanto codice o quanti scenari sono stati coperti dai test, ma non garantisce che i risultati siano corretti. Posso avere anche il 100% di coverage e un sistema che fornisce risposte sbagliate. Per questo, soprattutto nei sistemi AI, affianco ai test tecnici metriche di qualità e valutazioni basate su casi reali.
+
+Domanda2: Chi ha scritto le risposte attese nei miei dataset, e perché conta?
+Risposta: Le risposte attese, o ground truth, dovrebbero essere definite da esperti della materia o da annotatori qualificati, seguendo criteri chiari e verificabili. È importante sapere chi le ha scritte perché la qualità della valutazione dipende dall'affidabilità delle risposte di riferimento. Se sono errate, incomplete o soggettive,
+ anche le metriche di evaluation possono risultare fuorvianti. Per questo servono criteri di annotazione condivisi, validazione e, quando possibile, accordo tra più valutatori.
+
+Domanda3: Le mie soglie: perché quei valori? Che cosa costa l'errore a chi legge?
+Risposta: Le soglie non dovrebbero essere scelte arbitrariamente, ma definite in base ai risultati dei test, ai requisiti del progetto e al livello di rischio accettabile. Bisogna considerare soprattutto il costo dell'errore per chi utilizza il sistema: un'informazione imprecisa può creare confusione, far perdere tempo o portare a decisioni sbagliate.
+ In contesti critici, quindi, le soglie devono essere più rigorose. L'obiettivo è trovare un equilibrio tra qualità, affidabilità e rischio, dando priorità alla protezione dell'utente.
+
+Domanda4: Come valuto l'agente, e che cosa distingue una risposta corretta da una fortunata?
+Risposta: Valuto l'agente attraverso una serie di scenari realistici, verificando non solo la correttezza della risposta finale, ma anche il processo seguito: scelta degli strumenti, uso delle fonti, rispetto delle istruzioni e gestione degli errori. Una risposta corretta è supportata da informazioni verificabili e da un processo affidabile e ripetibile.
+ Una risposta fortunata, invece, può essere giusta per caso, senza che l'agente abbia seguito un ragionamento o utilizzato fonti adeguate. Per questo valuto sia il risultato sia il percorso che ha portato a ottenerlo.
+
+Domanda5: Guardando il mio conftest.py: sei sicuro che nessun test chiami il modello vero? Come lo verifichi?
+Risposta: Nel mio conftest.py sostituisco i provider reali con implementazioni finte tramite dependency override e imposto chiavi API non valide. Però non mi fermo alla configurazione: verifico che non esistano chiamate dirette agli SDK e blocco il traffico di rete durante i test. Così posso dimostrare che nessun test raggiunge accidentalmente un modello reale, anziché limitarmi a presumere che i mock siano sufficienti.
+
+Domanda6: Quanto costa una domanda al mio sistema, e come lo hai misurato? Se non hai ancora misurato il costo, puoi spiegare concretamente come lo calcoleresti.
+Risposta: Non utilizzando un modello vero, lo calcolerei registrando, per ogni richiesta, il numero di token in input e output, il modello utilizzato e il relativo prezzo per token. Aggiungerei anche i costi di embedding, eventuali chiamate multiple al modello e infrastruttura, come database e server. Eseguirei un insieme di richieste rappresentative, calcolando costo medio, mediano e massimo per individuare anche i casi più onerosi.
+ Infine, rapporterei il costo alla qualità della risposta, perché una risposta economica ma sbagliata non rappresenta un buon risultato.
+

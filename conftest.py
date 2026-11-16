@@ -14,6 +14,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+asyncpg://lipari:lipari@localhost:5432/lipari_ai_test"
 )
 os.environ.setdefault("JWT_SECRET", "segreto-dei-test-lungo-almeno-trentadue-caratteri")
+os.environ["OPENAI_API_KEY"] = "sk-test-mai-valida"
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-mai-valida"
 
 
 @pytest.fixture(scope="session", autouse=True)

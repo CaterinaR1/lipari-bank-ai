@@ -14,7 +14,7 @@ from tests.finti import embedder_finto, vettore
 async def indice_vuoto() -> AsyncIterator[None]:
     await engine.dispose()
     async with engine.begin() as c:
-        await c.execute(text("TRUNCATE document_chunks"))
+        await c.execute(text("TRUNCATE document_chunks, llm_calls"))
     yield
 
 

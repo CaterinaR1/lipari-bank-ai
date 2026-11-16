@@ -37,7 +37,7 @@ COMMISSIONI = Path("data/docs/commissioni_bonifico.md").read_text(encoding="utf-
 async def indice_vuoto() -> AsyncIterator[None]:
     await engine.dispose()  # le connessioni dei TestClient degli altri test: via dal pool
     async with engine.begin() as c:
-        await c.execute(text("TRUNCATE document_chunks"))
+        await c.execute(text("TRUNCATE document_chunks, llm_calls"))
     yield
 
 
@@ -202,6 +202,7 @@ async def test_la_spesa_dell_advisor_entra_nel_tetto(monkeypatch: pytest.MonkeyP
     async with engine.begin() as c:
         await c.execute(text("DELETE FROM cost_events"))
         await c.execute(text("DELETE FROM chat_messages"))
+        await c.execute(text("DELETE FROM llm_calls"))
 
     domanda = {"question": "Quanto costa un bonifico SEPA online?"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

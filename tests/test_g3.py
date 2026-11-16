@@ -30,7 +30,10 @@ async def tabelle_vuote() -> AsyncIterator[None]:
     # CASCADE: le tabelle che arriveranno nei giorni dopo puntano a queste
     async with engine.begin() as c:
         await c.execute(
-            text("TRUNCATE chat_messages, chat_sessions, movements, accounts, customers CASCADE")
+            text(
+                "TRUNCATE chat_messages, chat_sessions, movements, accounts, customers, "
+                "llm_calls CASCADE"
+            )
         )
     yield
     await engine.dispose()

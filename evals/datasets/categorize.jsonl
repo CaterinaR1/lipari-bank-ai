@@ -1,0 +1,40 @@
+﻿{"id":"cat-01","description":"Addebito bolletta Enel Energia","amount":87.40,"expected_category":"UTILITIES"}
+{"id":"cat-02","description":"Pagamento Edison gas","amount":65.00,"expected_category":"UTILITIES"}
+{"id":"cat-03","description":"A2A luce gennaio","amount":54.20,"expected_category":"UTILITIES"}
+{"id":"cat-04","description":"Bolletta Hera acqua","amount":32.10,"expected_category":"UTILITIES"}
+{"id":"cat-05","description":"Ricarica telefonica TIM","amount":15.00,"expected_category":"UTILITIES"}
+{"id":"cat-06","description":"Fattura Vodafone fibra","amount":29.90,"expected_category":"UTILITIES"}
+{"id":"cat-07","description":"Abbonamento Fastweb casa","amount":27.95,"expected_category":"UTILITIES"}
+{"id":"cat-08","description":"Rinnovo Iliad mobile","amount":9.99,"expected_category":"UTILITIES"}
+{"id":"cat-09","description":"Spesa Esselunga Milano","amount":64.15,"expected_category":"GROCERIES"}
+{"id":"cat-10","description":"Acquisto Coop Lombardia","amount":45.90,"expected_category":"GROCERIES"}
+{"id":"cat-11","description":"Conad supermercato","amount":52.30,"expected_category":"GROCERIES"}
+{"id":"cat-12","description":"Carrefour Market spesa settimanale","amount":71.08,"expected_category":"GROCERIES"}
+{"id":"cat-13","description":"Lidl alimentari","amount":38.60,"expected_category":"GROCERIES"}
+{"id":"cat-14","description":"Rifornimento benzina Eni","amount":60.00,"expected_category":"TRANSPORT"}
+{"id":"cat-15","description":"Carburante Q8","amount":55.40,"expected_category":"TRANSPORT"}
+{"id":"cat-16","description":"Tamoil distributore","amount":48.75,"expected_category":"TRANSPORT"}
+{"id":"cat-17","description":"Biglietto Trenitalia Milano-Roma","amount":89.90,"expected_category":"TRANSPORT"}
+{"id":"cat-18","description":"Italo treno alta velocità","amount":39.00,"expected_category":"TRANSPORT"}
+{"id":"cat-19","description":"Abbonamento ATM mensile","amount":39.00,"expected_category":"TRANSPORT"}
+{"id":"cat-20","description":"Metro ATAC Roma","amount":1.50,"expected_category":"TRANSPORT"}
+{"id":"cat-21","description":"Cena Ristorante Da Mario","amount":58.00,"expected_category":"RESTAURANTS"}
+{"id":"cat-22","description":"Pizzeria Bella Napoli","amount":24.50,"expected_category":"RESTAURANTS"}
+{"id":"cat-23","description":"Trattoria Milanese pranzo","amount":44.70,"expected_category":"RESTAURANTS"}
+{"id":"cat-24","description":"Osteria del Ponte","amount":36.00,"expected_category":"RESTAURANTS"}
+{"id":"cat-25","description":"Abbonamento Netflix mensile","amount":12.99,"expected_category":"ENTERTAINMENT"}
+{"id":"cat-26","description":"Spotify Premium","amount":10.99,"expected_category":"ENTERTAINMENT"}
+{"id":"cat-27","description":"Disney Plus abbonamento","amount":8.99,"expected_category":"ENTERTAINMENT"}
+{"id":"cat-28","description":"DAZN calcio","amount":29.99,"expected_category":"ENTERTAINMENT"}
+{"id":"cat-29","description":"Bonifico a favore di Giovanni Rossi","amount":250.00,"expected_category":"OTHER"}
+{"id":"cat-30","description":"Prelievo bancomat","amount":100.00,"expected_category":"OTHER"}
+{"id":"cat-31","description":"Commissione bonifico","amount":1.00,"expected_category":"OTHER"}
+{"id":"cat-32","description":"Canone conto corrente","amount":5.00,"expected_category":"OTHER"}
+{"id":"cat-33","description":"Rimborso assicurazione","amount":120.00,"expected_category":"OTHER"}
+{"id":"cat-34","description":"Pagamento tasse F24","amount":340.00,"expected_category":"OTHER"}
+{"id":"cat-35","description":"Farmacia centrale acquisto","amount":18.40,"expected_category":"OTHER"}
+{"id":"cat-36","description":"Iren gas metano","amount":61.20,"expected_category":"UTILITIES"}
+{"id":"cat-37","description":"WindTre ricarica","amount":20.00,"expected_category":"UTILITIES"}
+{"id":"cat-38","description":"Spesa alimentari Carrefour","amount":83.10,"expected_category":"GROCERIES"}
+{"id":"cat-39","description":"Parcheggio metro stazione","amount":3.00,"expected_category":"OTHER"}
+{"id":"cat-40","description":"Barbiere taglio capelli","amount":25.00,"expected_category":"OTHER"}

@@ -21,7 +21,13 @@ async def main(domanda: str) -> None:
         tutti = build_tools_for(user, deps)
         casi: list[tuple[str, str, list[Tool]]] = [("agente unico", AGENT_SYSTEM, tutti)]
         for s in SPECIALISTI.values():
-            casi.append((f"specialista {s.nome}", s.system_prompt, [t for t in tutti if t.name in s.tool_names]))
+            casi.append(
+            (
+        f"specialista {s.nome}",
+        s.system_prompt,
+        [t for t in tutti if t.name in s.tool_names],
+            )
+        )
         for nome, prompt, tools in casi:
             run = await run_agent(
                 messaggi=[

@@ -1,16 +1,18 @@
 # src/api/agent.py — l'agente, e le due decisioni che può aspettare
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from src.agents.supervisor import run_supervisor
 
 from src.agents.approval import riprendi
 from src.agents.deps import Deps, get_deps
 from src.agents.loop import RunResult, run_agent
 from src.agents.prompts import AGENT_SYSTEM
+from src.agents.supervisor import run_supervisor
 from src.agents.tools import build_tools_for
 from src.auth.deps import UserContext, get_current_user, require_role
+from src.observability.ledger import CostLedger
 
 router = APIRouter(prefix="/api/ai", tags=["agent"])
 
@@ -60,6 +62,15 @@ def _risposta(run: RunResult) -> AgentResponse:
         cost_eur=float(run.cost_eur),
     )
 
+async def _registra(
+    deps: Deps, endpoint: str, username: str, run_id: str | None, costo: Decimal
+) -> None:
+    """Il costo nel registro. La sessione è quella dei servizi dell'agente."""
+    CostLedger(deps.runs.session).aggiungi(
+        endpoint=endpoint, username=username, model=deps.model, cost_eur=costo, run_id=run_id
+    )
+    await deps.runs.session.commit()
+
 
 @router.post("/agent", response_model=AgentResponse)
 async def agent(
@@ -78,6 +89,9 @@ async def agent(
         runs=deps.runs,
         user=user,  # dove fermarsi, e per chi
     )
+    await _registra(
+    deps, "agent", user.username, run.run_id, run.cost_eur
+    )
     return _risposta(run)
 
 
@@ -89,6 +103,9 @@ async def supervisor(
 ) -> SupervisorResponse:
     """La stessa domanda, divisa fra specialisti. Per confrontarla con /agent, costo compreso."""
     esito = await run_supervisor(user, payload.message, deps)
+    await _registra(
+    deps, "supervisor", user.username, None, esito.cost_eur
+    )
     return SupervisorResponse(
         risposta=esito.risposta,
         instradamento=esito.instradamento,
@@ -135,6 +152,7 @@ async def reject(
     deps: Annotated[Deps, Depends(get_deps)],
 ) -> AgentResponse:
     """Respinge l'azione sospesa: il run riprende, e l'agente riferisce il rifiuto."""
+
     return await _decidi(run_id, approvatore, approvato=False, motivo=payload.motivo, deps=deps)
 
 
@@ -165,6 +183,9 @@ async def _decidi(
         stato, approvato=approvato, da=approvatore.username, motivo=motivo, deps=deps
     )
 
+    await _registra(
+            deps, "agent", stato.username, run_id, ripreso.cost_eur - Decimal(stato.cost_eur)
+        )
     # 5. e si chiude, a meno che il run non si sia fermato di nuovo
     if ripreso.stopped_by != "awaiting_approval":
         await deps.runs.chiudi(run_id, "done" if approvato else "rejected")
