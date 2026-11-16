@@ -186,6 +186,13 @@ async def test_gli_endpoint_ingeriscono_e_rispondono(monkeypatch: pytest.MonkeyP
         "text-embedding-3-small",
     )
     app.dependency_overrides[get_embedder] = lambda: giu
+
+    async def _no_cache(
+        self: RAGService, key: str
+    ) -> None:  # la cache risposta G10 non deve mascherare i guasti
+        return None
+
+    monkeypatch.setattr(RAGService, "_risposta_cache", _no_cache)
     domanda = {"question": "Quanto costa un bonifico SEPA online?"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         guasto = await c.post("/api/ai/advice", json=domanda)

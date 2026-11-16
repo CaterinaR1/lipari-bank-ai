@@ -167,6 +167,7 @@ def build_tools_for(user: UserContext, deps: Deps) -> list[Tool]:
         ),
     ]
 
+
 def _sopra_soglia(a: SegnalazioneArgs) -> bool:
     """Un importo che non c'è non è un importo piccolo: nel dubbio si chiede."""
     return a.importo is None or a.importo > settings.soglia_approvazione_eur

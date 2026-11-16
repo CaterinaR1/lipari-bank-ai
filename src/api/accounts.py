@@ -36,6 +36,7 @@ async def spending(
 ) -> Spending:
     return await AccountService(session).spending(user.username, account_id, date_from, date_to)
 
+
 @router.post("/{account_id}/movements", response_model=MovementCreated, status_code=201)
 async def register_movement(
     account_id: str,

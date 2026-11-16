@@ -24,6 +24,7 @@ class Spending(BaseModel):
     months: list[MonthlySpending]
     total: Decimal
 
+
 class MovementCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

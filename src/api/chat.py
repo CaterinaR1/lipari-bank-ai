@@ -29,6 +29,7 @@ def get_chat_service(
         session, llm, SYSTEM_PROMPT, settings.daily_budget_eur, settings.default_model
     )
 
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,

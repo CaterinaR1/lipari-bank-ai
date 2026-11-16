@@ -173,6 +173,7 @@ async def test_un_periodo_rovesciato_e_422():
         )
     assert r.status_code == 422 and r.json()["error"] == "INVALID_PERIOD"
 
+
 # ------------------------------------------------------------------ l'estensione e il commit
 async def saldo(iban: str) -> Decimal:
     async with AsyncSessionLocal() as s:
@@ -184,7 +185,7 @@ NUOVO = {
     "booking_date": "2026-11-03",
     "description": "Commissione tenuta conto",
     "amount": "-12.50",
-    }
+}
 
 
 async def test_un_movimento_aggiorna_il_saldo():
@@ -225,6 +226,7 @@ async def test_se_il_commit_fallisce_il_client_lo_vede(monkeypatch: pytest.Monke
     assert await conta("movements") == movimenti_prima
     assert await saldo(PRINCIPALE) == saldo_prima
 
+
 EXTRA = [
     ("Commissione bonifico", Decimal("-0.10")),
     ("Commissione bonifico", Decimal("-0.20")),
@@ -242,9 +244,7 @@ async def test_prova_del_centesimo_e_tre_decimali():
     await seed_accounts.main()
     async with AsyncSessionLocal() as s:
         s.add_all(
-            Movement(
-                account_id=PRINCIPALE, booking_date=date.today(), description=d, amount=a
-            )
+            Movement(account_id=PRINCIPALE, booking_date=date.today(), description=d, amount=a)
             for d, a in EXTRA
         )
         await s.commit()

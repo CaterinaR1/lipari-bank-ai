@@ -1,9 +1,11 @@
-# src/main.py — l'applicazione: la sonda, gli handler degli errori, i middleware, i router
+# src/main.py - app FastAPI con health, readiness e lifecycle cache/db
+import asyncio
 import logging
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request, Response
@@ -12,10 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api import accounts, admin, advice, agent, auth, categorize, chat, glossary, movements
+from src.cache import chiudi_redis, get_redis
 from src.config import settings
+from src.db.session import AsyncSessionLocal, engine
 from src.exceptions import AppError, RateLimitError
 from src.observability.json_log import configura_log, request_id
 from src.types.error import ErrorResponse
@@ -26,8 +31,6 @@ ID_VALIDO = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 
 class Credentials(BaseModel):
-    """Quali chiavi ci sono. Un sì o un no: mai il valore, e mai un pezzo del valore."""
-
     openai: bool
     anthropic: bool
 
@@ -41,17 +44,35 @@ class HealthResponse(BaseModel):
     credentials: Credentials
 
 
+class ComponenteReady(BaseModel):
+    stato: str
+    dettaglio: str | None = None
+
+
+class ReadyResponse(BaseModel):
+    status: str
+    timestamp: str
+    controlli: dict[str, ComponenteReady]
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await chiudi_redis()
+    await engine.dispose()
+
+
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
-    description="LipariBank AI Assistant — Bootcamp Python AI Powered, Lipari Consulting",
+    description="LipariBank AI Assistant",
+    lifespan=lifespan,
 )
 
 
 def _busta(
     req: Request, status: int, codice: str, messaggio: str, dettagli: list[str] | None = None
 ) -> dict[str, object]:
-    """La forma unica di ogni errore: la stessa per il 404, il 422, il 429 e il 500."""
     return ErrorResponse(
         timestamp=datetime.now(UTC),
         status=status,
@@ -83,9 +104,6 @@ CODICI_HTTP = {
 
 @app.exception_handler(StarletteHTTPException)
 async def handle_http(req: Request, exc: StarletteHTTPException) -> JSONResponse:
-    # Gli errori del framework: una rotta che non esiste, un metodo sbagliato, l'HTTPException
-    # di una dipendenza. Senza questo handler escono come {"detail": ...}, una forma in più.
-    # Gli header di chi l'ha sollevata restano: il 401 deve portare WWW-Authenticate
     return JSONResponse(
         status_code=exc.status_code,
         headers=exc.headers,
@@ -96,58 +114,47 @@ async def handle_http(req: Request, exc: StarletteHTTPException) -> JSONResponse
 
 
 def _campo(loc: tuple[int | str, ...]) -> str:
-    """Da ("body", "amount") ad "amount": il campo come lo ha scritto il chiamante."""
     return ".".join(str(p) for p in loc[1:]) or str(loc[0])
 
 
 @app.exception_handler(RequestValidationError)
 async def handle_validation(req: Request, exc: RequestValidationError) -> JSONResponse:
-    # Un dettaglio per campo, «dove: cosa». Il valore ricevuto (e["input"]) non si rimanda
-    # indietro: può essere lungo un file intero, o contenere quello che non doveva uscire.
-    # Un corpo che non è JSON non ha un campo: il suo loc è ("body", 0), e si dice «corpo».
     dettagli = [
         f"{'corpo' if e['type'] == 'json_invalid' else _campo(e['loc'])}: {e['msg']}"
         for e in exc.errors()
     ]
     return JSONResponse(
         status_code=422,
-        content=_busta(req, 422, "VALIDATION_ERROR", "La richiesta non è valida", dettagli),
+        content=_busta(req, 422, "VALIDATION_ERROR", "La richiesta non e valida", dettagli),
     )
 
 
 @app.exception_handler(Exception)
 async def handle_unexpected(req: Request, exc: Exception) -> JSONResponse:
-    logger.exception("errore_non_gestito", extra={"path": req.url.path})  # il dettaglio nel log
+    logger.exception("errore_non_gestito", extra={"path": req.url.path})
     return JSONResponse(
-        status_code=500,  # e fuori, niente
-        # il middleware non arriva a scriverlo, perché call_next ha sollevato: lo mette l'handler
+        status_code=500,
         headers={"X-Request-Id": getattr(req.state, "request_id", "-")},
         content=_busta(req, 500, "INTERNAL_ERROR", "Errore inatteso"),
     )
-
 
 
 @app.middleware("http")
 async def add_request_id(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    # Se il chiamante ne manda uno, lo stesso id attraversa i due sistemi; se non lo manda,
-    # o manda qualcosa che non ha la forma di un id, se ne genera uno nuovo.
     ricevuto = request.headers.get("X-Request-Id", "")
     rid = ricevuto if ID_VALIDO.fullmatch(ricevuto) else str(uuid.uuid4())
-
-    request_id.set(rid)  # Da qui ogni riga di log di questa richiesta lo porta
-    request.state.request_id = rid  # Lo legge l'handler del 500
-
+    request_id.set(rid)
+    request.state.request_id = rid
     inizio = time.perf_counter()
     response = await call_next(request)
-
     response.headers["X-Request-Id"] = rid
     response.headers["X-Process-Time"] = f"{time.perf_counter() - inizio:.4f}"
     return response
 
 
-app.add_middleware(  # registrato per ultimo: è il più esterno
+app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
@@ -155,6 +162,25 @@ app.add_middleware(  # registrato per ultimo: è il più esterno
     allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
 )
 
+
+async def _database() -> ComponenteReady:
+    try:
+        async with AsyncSessionLocal() as session:
+            await asyncio.wait_for(session.execute(text("SELECT 1")), timeout=1.0)
+        return ComponenteReady(stato="ok")
+    except Exception:
+        return ComponenteReady(stato="errore", dettaglio="database non raggiungibile")
+
+
+async def _cache_check() -> ComponenteReady:
+    r = get_redis()
+    if r is None:
+        return ComponenteReady(stato="disattivata")
+    try:
+        await asyncio.wait_for(r.ping(), timeout=0.2)
+        return ComponenteReady(stato="ok")
+    except Exception:
+        return ComponenteReady(stato="degradata", dettaglio="cache non raggiungibile")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -172,6 +198,23 @@ async def health() -> HealthResponse:
     )
 
 
+@app.get("/ready", response_model=ReadyResponse)
+async def ready() -> JSONResponse:
+    db = await _database()
+    cache = await _cache_check()
+    ready_ok = db.stato == "ok"
+    status = "READY" if ready_ok else "NOT_READY"
+    payload = ReadyResponse(
+        status=status,
+        timestamp=datetime.now(UTC).isoformat(),
+        controlli={"database": db, "cache": cache},
+    )
+    return JSONResponse(
+        status_code=200 if ready_ok else 503,
+        content=payload.model_dump(mode="json"),
+    )
+
+
 app.include_router(chat.router)
 app.include_router(glossary.router)
 app.include_router(categorize.router)
@@ -182,6 +225,7 @@ app.include_router(auth.router)
 app.include_router(agent.router)
 app.include_router(admin.router)
 app.state.limiter = advice.limiter
+
 
 @app.exception_handler(RateLimitExceeded)
 async def handle_rate_limit(req: Request, exc: RateLimitExceeded) -> JSONResponse:

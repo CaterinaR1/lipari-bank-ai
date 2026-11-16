@@ -19,9 +19,8 @@ DOMANDE: list[tuple[str, str]] = [
     ("policy", "Cosa si dice al cliente quando un'operazione è in verifica?"),
     ("policy", "Chi tiene aggiornato l'elenco dei paesi a rischio elevato?"),
     (
-    "entrambi",
-    "Il cliente C-10234 può disporre 25.000 euro "
-    "verso il Venezuela dal conto principale?",
+        "entrambi",
+        "Il cliente C-10234 può disporre 25.000 euro verso il Venezuela dal conto principale?",
     ),
     ("ambigua", "Ha fatto bonifici verso Panama?"),
     ("ambigua", "Posso procedere?"),
@@ -31,12 +30,12 @@ DOMANDE: list[tuple[str, str]] = [
 
 async def main(percorso_prompt: str | None) -> None:
     prompt = (
-    await asyncio.to_thread(
-        Path(percorso_prompt).read_text,
-        encoding="utf-8",
-    )
-    if percorso_prompt
-    else PROMPT_TRIAGE
+        await asyncio.to_thread(
+            Path(percorso_prompt).read_text,
+            encoding="utf-8",
+        )
+        if percorso_prompt
+        else PROMPT_TRIAGE
     )
     client = get_openai()
     conteggio: Counter[str] = Counter()

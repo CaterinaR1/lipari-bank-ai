@@ -132,6 +132,7 @@ class CostEvent(Base):
         DateTime(timezone=True), default=adesso, index=True
     )
 
+
 class AppUser(Base):
     __tablename__ = "app_users"
 
@@ -158,6 +159,7 @@ class ComplianceAlert(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
 
 # ---- lo stato di un run che si ferma e riprende
 JSON_O_JSONB = JSON().with_variant(JSONB(), "postgresql")  # JSONB su Postgres, JSON nei test
@@ -191,6 +193,7 @@ class AgentRunState(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
 
 class LlmCall(Base):
     __tablename__ = "llm_calls"

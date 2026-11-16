@@ -17,3 +17,10 @@ wheels/
 
 .coverage
 evals/results/
+
+# Artefatti locali
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.log
+docs/tetti_partenza.json

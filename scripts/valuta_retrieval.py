@@ -51,9 +51,7 @@ async def valuta(percorso: Path, mode: SearchMode, k: int, soglia: float) -> Non
             documenti = [r.document_id for r in risultati]
             if domanda["answerable"]:
                 colpo_doc = domanda["gold_document"] in documenti
-                colpo_chunk = any(
-                    domanda["gold_phrase"] in r.content for r in risultati
-                )
+                colpo_chunk = any(domanda["gold_phrase"] in r.content for r in risultati)
                 colpi_documento += int(colpo_doc)
                 colpi_passaggio += int(colpo_chunk)
                 primo_giusto = bool(documenti) and documenti[0] == domanda["gold_document"]
@@ -78,8 +76,7 @@ async def valuta(percorso: Path, mode: SearchMode, k: int, soglia: float) -> Non
     n_neg = len(negativi) or 1
     print("\n--- totale ---")
     print(
-        f"hit-rate documento@{k}: {colpi_documento}/{len(positivi)} "
-        f"= {colpi_documento / n_pos:.2f}"
+        f"hit-rate documento@{k}: {colpi_documento}/{len(positivi)} = {colpi_documento / n_pos:.2f}"
     )
     print(
         f"hit-rate documento@1:    {colpi_documento_primo}/{len(positivi)} "

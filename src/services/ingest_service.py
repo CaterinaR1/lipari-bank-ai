@@ -1,4 +1,8 @@
-# src/services/ingest_service.py — dal documento ai passaggi nell'indice
+# src/services/ingest_service.py - ingestione e invalidazione cache advice
+import logging
+
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,25 +10,35 @@ from src.db.models import DocumentChunk
 from src.lib.chunking import chunk_text
 from src.llm.embedding_client import Embedder
 
+log = logging.getLogger(__name__)
+
 
 def senza_ripetizioni(testo: str) -> str:
-    """Un paragrafo ripetuto, come una pagina incollata due volte, resta una volta sola.
-
-    Prima del taglio, non dopo: con la sovrapposizione i pezzi di due pagine uguali cominciano in
-    punti diversi, e non sono mai identici.
-    """
     paragrafi = [p.strip() for p in testo.split("\n\n") if p.strip()]
     return "\n\n".join(dict.fromkeys(paragrafi))
 
 
 class IngestService:
-    """Porta un documento dentro l'indice: taglia, vettorizza, salva."""
+    """Porta un documento nell'indice e invalida la cache risposte advisor."""
 
-    LOTTO = 64  # quanti passaggi per chiamata, sotto il tetto di token del modello
+    LOTTO = 64
 
-    def __init__(self, session: AsyncSession, embedder: Embedder) -> None:
+    def __init__(
+        self, session: AsyncSession, embedder: Embedder, cache: Redis | None = None
+    ) -> None:
         self.session = session
         self.embedder = embedder
+        self.cache = cache
+
+    async def _invalida_cache_advice(self) -> None:
+        if self.cache is None:
+            return
+        try:
+            keys = [k async for k in self.cache.scan_iter(match="advice:*")]
+            if keys:
+                await self.cache.delete(*keys)
+        except RedisError:
+            log.warning("advice_cache_invalidate_failed")
 
     async def ingest(
         self,
@@ -33,11 +47,6 @@ class IngestService:
         metadata: dict[str, str] | None = None,
         visibility: str = "public",
     ) -> int:
-        """Taglia, vettorizza e salva. Ritorna quanti passaggi sono stati scritti.
-
-        Ri-ingerire lo stesso `document_id` sostituisce: i passaggi precedenti vengono
-        cancellati prima, nella stessa transazione.
-        """
         await self.session.execute(
             delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
         )
@@ -45,6 +54,7 @@ class IngestService:
         pezzi = chunk_text(senza_ripetizioni(text))
         if not pezzi:
             await self.session.commit()
+            await self._invalida_cache_advice()
             return 0
 
         for inizio in range(0, len(pezzi), self.LOTTO):
@@ -64,5 +74,6 @@ class IngestService:
                 ]
             )
 
-        await self.session.commit()  # o il documento è nell'indice tutto, o non c'è
+        await self.session.commit()
+        await self._invalida_cache_advice()
         return len(pezzi)

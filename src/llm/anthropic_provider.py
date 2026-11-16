@@ -114,4 +114,3 @@ class AnthropicProvider:
         except anthropic.APIError as exc:
             raise LLMProviderError("anthropic", str(exc)) from exc
         yield self._risposta(finale.content, finale.usage)
-

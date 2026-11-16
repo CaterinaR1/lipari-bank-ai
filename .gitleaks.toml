@@ -1,0 +1,18 @@
+title = "lipari-bank-ai gitleaks config"
+
+[allowlist]
+description = "chiavi/segreti finti usati nei test e seed di sviluppo"
+regexes = [
+  '''sk-test''',
+  '''sk-ant-test''',
+  '''bootcamp''',
+  '''cambiami_con_un_segreto_lungo_almeno_32_caratteri''',
+  '''segreto-dei-test-lungo-almeno-trentadue-caratteri''',
+  '''test-secret-jwt-key-at-least-32-characters-long''',
+  '''eval-secret-jwt-key-at-least-32-characters-long''',
+]
+paths = [
+  '''tests/.*''',
+  '''scripts/seed_.*''',
+  '''\.env\.example''',
+]

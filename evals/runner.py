@@ -1,4 +1,4 @@
-﻿# evals/runner.py — esegue i tre golden dataset e misura la qualità del sistema
+# evals/runner.py — esegue i tre golden dataset e misura la qualità del sistema
 from __future__ import annotations
 
 import argparse
@@ -50,9 +50,7 @@ class Caso:
 
 def carica(nome: str) -> list[Caso]:
     path = DATASETS / nome
-    righe = [
-        r for r in path.read_text(encoding="utf-8-sig").splitlines() if r.strip()
-    ]
+    righe = [r for r in path.read_text(encoding="utf-8-sig").splitlines() if r.strip()]
     return [Caso(json.loads(r)) for r in righe]
 
 
@@ -110,14 +108,9 @@ async def valuta_categorize(session: AsyncSession) -> dict[str, Any]:
     return {"score": punteggio, "passed": ok, "total": len(casi), "cases": dettagli}
 
 
-async def _giudice(
-    client: AsyncOpenAI, domanda: str, risposta: str, gold: str
-) -> bool:
+async def _giudice(client: AsyncOpenAI, domanda: str, risposta: str, gold: str) -> bool:
     rubrica = RUBRICA.read_text(encoding="utf-8")
-    prompt = (
-        f"DOMANDA\n{domanda}\n\nRISPOSTA ATTESA\n{gold}\n\n"
-        f"RISPOSTA DEL SISTEMA\n{risposta}\n"
-    )
+    prompt = f"DOMANDA\n{domanda}\n\nRISPOSTA ATTESA\n{gold}\n\nRISPOSTA DEL SISTEMA\n{risposta}\n"
     r = await client.chat.completions.create(
         model=settings.default_model,
         temperature=0,
@@ -155,9 +148,7 @@ async def valuta_advice(factory: async_sessionmaker[AsyncSession]) -> dict[str, 
             )
             user = UserContext(username="eval_operator", role=d.get("role", "operator"))
             esito = await rag.advise(d["question"], user, d.get("history"))
-            passato = await _giudice(
-                giudice, d["question"], esito.answer, d["expected_answer"]
-            )
+            passato = await _giudice(giudice, d["question"], esito.answer, d["expected_answer"])
         if passato:
             ok += 1
         dettagli.append({"id": d.get("id"), "pass": passato, "question": d["question"]})
@@ -177,9 +168,7 @@ def _tool_chiamati(messages: list[dict[str, Any]]) -> list[str]:
 
 async def valuta_traiettorie(factory: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
     casi = carica("agent_traiettorie.jsonl")
-    client = AsyncOpenAI(
-        api_key=settings.openai_api_key, base_url=settings.openai_base_url or None
-    )
+    client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
     ok = 0
     dettagli = []
     for caso in casi:
@@ -217,8 +206,7 @@ async def valuta_traiettorie(factory: async_sessionmaker[AsyncSession]) -> dict[
             chiamati = list(run.tool_calls)
             if stato and stato.status == "awaiting_approval":
                 pending = [
-                    c.get("function", {}).get("name", "")
-                    for c in (stato.pending_calls or [])
+                    c.get("function", {}).get("name", "") for c in (stato.pending_calls or [])
                 ]
                 chiamati.extend(pending)
                 await deps.runs.chiudi(run.run_id, "closed_by_eval")

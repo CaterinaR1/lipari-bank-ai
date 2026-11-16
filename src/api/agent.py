@@ -62,6 +62,7 @@ def _risposta(run: RunResult) -> AgentResponse:
         cost_eur=float(run.cost_eur),
     )
 
+
 async def _registra(
     deps: Deps, endpoint: str, username: str, run_id: str | None, costo: Decimal
 ) -> None:
@@ -89,9 +90,7 @@ async def agent(
         runs=deps.runs,
         user=user,  # dove fermarsi, e per chi
     )
-    await _registra(
-    deps, "agent", user.username, run.run_id, run.cost_eur
-    )
+    await _registra(deps, "agent", user.username, run.run_id, run.cost_eur)
     return _risposta(run)
 
 
@@ -103,9 +102,7 @@ async def supervisor(
 ) -> SupervisorResponse:
     """La stessa domanda, divisa fra specialisti. Per confrontarla con /agent, costo compreso."""
     esito = await run_supervisor(user, payload.message, deps)
-    await _registra(
-    deps, "supervisor", user.username, None, esito.cost_eur
-    )
+    await _registra(deps, "supervisor", user.username, None, esito.cost_eur)
     return SupervisorResponse(
         risposta=esito.risposta,
         instradamento=esito.instradamento,
@@ -184,8 +181,8 @@ async def _decidi(
     )
 
     await _registra(
-            deps, "agent", stato.username, run_id, ripreso.cost_eur - Decimal(stato.cost_eur)
-        )
+        deps, "agent", stato.username, run_id, ripreso.cost_eur - Decimal(stato.cost_eur)
+    )
     # 5. e si chiude, a meno che il run non si sia fermato di nuovo
     if ripreso.stopped_by != "awaiting_approval":
         await deps.runs.chiudi(run_id, "done" if approvato else "rejected")

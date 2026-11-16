@@ -1,13 +1,12 @@
 services:
-  postgres:
+  db:
     image: pgvector/pgvector:pg16
-    container_name: lipari-postgres
     environment:
       POSTGRES_USER: lipari
-      POSTGRES_PASSWORD: lipari
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lipari}
       POSTGRES_DB: lipari_ai
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,5 +15,85 @@ services:
       timeout: 3s
       retries: 10
 
+  postgres:
+    image: pgvector/pgvector:pg16
+    profiles: ["sviluppo"]
+    environment:
+      POSTGRES_USER: lipari
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lipari}
+      POSTGRES_DB: lipari_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - lipari-ai-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lipari -d lipari_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    pull_policy: never
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lipari:${POSTGRES_PASSWORD:-lipari}@db:5432/lipari_ai
+      REDIS_URL: redis://cache:6379/0
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    build: .
+    pull_policy: never
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lipari:${POSTGRES_PASSWORD:-lipari}@db:5432/lipari_ai
+      REDIS_URL: redis://cache:6379/0
+    command: ["python", "-m", "scripts.seed_all"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    pull_policy: never
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lipari:${POSTGRES_PASSWORD:-lipari}@db:5432/lipari_ai
+      REDIS_URL: redis://cache:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
 volumes:
   pgdata:
+  lipari-ai-data:
+    external: true
+    name: lipari-ai-data

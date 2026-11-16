@@ -1,4 +1,4 @@
-﻿# tests/test_g9.py — eval pipeline, ledger, admin, logging, estensione
+# tests/test_g9.py — eval pipeline, ledger, admin, logging, estensione
 from __future__ import annotations
 
 import json
@@ -21,11 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_datasets_hanno_dimensione_e_schema_minimo() -> None:
     def righe(nome: str) -> list[dict[str, Any]]:
         p = ROOT / "evals" / "datasets" / nome
-        return [
-            json.loads(r)
-            for r in p.read_text(encoding="utf-8-sig").splitlines()
-            if r.strip()
-        ]
+        return [json.loads(r) for r in p.read_text(encoding="utf-8-sig").splitlines() if r.strip()]
 
     cat = righe("categorize.jsonl")
     adv = righe("advice.jsonl")

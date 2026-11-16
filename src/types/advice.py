@@ -33,7 +33,7 @@ class Citation(BaseModel):
 class AdviceResponse(BaseModel):
     answer: str
     citations: list[Citation]
-    tokens_used: int
-    cost_eur: float
+    tokens_used: int  # include anche la riscrittura quando presente
+    cost_eur: float  # include anche la riscrittura quando presente
     model: str | None = None
     rewritten_query: str | None = None

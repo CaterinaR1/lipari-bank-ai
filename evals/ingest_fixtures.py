@@ -1,4 +1,4 @@
-﻿# evals/ingest_fixtures.py — prepara l'indice e i dati minimi per la valutazione
+# evals/ingest_fixtures.py — prepara l'indice e i dati minimi per la valutazione
 from __future__ import annotations
 
 import asyncio

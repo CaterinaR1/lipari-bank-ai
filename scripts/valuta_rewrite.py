@@ -84,9 +84,7 @@ class Aggregato:
 
 async def _leggi[Modello: BaseModel](percorso: Path, modello: type[Modello]) -> list[Modello]:
     testo = await asyncio.to_thread(percorso.read_text, encoding="utf-8")
-    return [
-        modello.model_validate_json(riga) for riga in testo.splitlines() if riga.strip()
-    ]
+    return [modello.model_validate_json(riga) for riga in testo.splitlines() if riga.strip()]
 
 
 async def _misura(

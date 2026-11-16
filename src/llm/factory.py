@@ -1,4 +1,4 @@
-# src/llm/factory.py — un solo posto decide quale fornitore, e con quali client
+# src/llm/factory.py - typed redis arg
 from functools import cache
 
 import instructor
@@ -10,19 +10,21 @@ from src.exceptions import AppError
 from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.client import LLMProvider
 from src.llm.embedding_client import Embedder, EmbeddingClient
+from src.llm.embeddings import CachedEmbedder
 from src.llm.local_embedding_client import LocalEmbeddingClient
 from src.llm.openai_provider import OpenAIProvider
+from src.llm.prompt import load_prompt
+from src.llm.rewriter import QueryRewriter
 
 
 def _chiave(valore: str, nome: str) -> str:
-    if not valore:  # l'SDK rifiuta una chiave vuota: meglio un errore che dica quale manca
-        raise AppError(503, "LLM_NOT_CONFIGURED", f"Manca {nome}: il modello non è configurato")
+    if not valore:
+        raise AppError(503, "LLM_NOT_CONFIGURED", f"Manca {nome}: il modello non e configurato")
     return valore
 
 
-@cache  # un client per processo: tiene il suo pool di connessioni
+@cache
 def _openai() -> AsyncOpenAI:
-    # timeout scelto, non ereditato (il default è di dieci minuti); max_retries è quello dell'SDK
     return AsyncOpenAI(
         api_key=_chiave(settings.openai_api_key, "OPENAI_API_KEY"),
         base_url=settings.openai_base_url or None,
@@ -50,7 +52,6 @@ def get_llm_provider() -> LLMProvider:
 
 
 def get_openai() -> AsyncOpenAI:
-    """Il client dell'SDK, per chi deve parlarci direttamente: lo stesso, con lo stesso timeout."""
     return _openai()
 
 
@@ -61,7 +62,6 @@ def get_instructor() -> instructor.AsyncInstructor:
 
 @cache
 def _openai_embedding() -> AsyncOpenAI:
-    # sempre api.openai.com: gli embedding non passano dall'endpoint compatibile della chat
     return AsyncOpenAI(
         api_key=_chiave(settings.embedding_api_key, "EMBEDDING_API_KEY"),
         timeout=20.0,
@@ -69,8 +69,28 @@ def _openai_embedding() -> AsyncOpenAI:
     )
 
 
+@cache
 def get_embedder() -> Embedder:
-    # lo stesso modello per i documenti e per le domande: è la regola che non si viola
+    """Embedder per DI/test; usa Redis se configurato (best-effort)."""
+    from src.cache import get_redis
+
+    redis = get_redis()
     if settings.embedding_backend == "local":
-        return LocalEmbeddingClient(settings.embedding_model, settings.embedding_dim)
-    return EmbeddingClient(_openai_embedding(), settings.embedding_model)
+        base: Embedder = LocalEmbeddingClient(settings.embedding_model, settings.embedding_dim)
+    else:
+        base = EmbeddingClient(_openai_embedding(), settings.embedding_model)
+    if redis is None:
+        return base
+    return CachedEmbedder(
+        base,
+        redis,
+        model=settings.embedding_model,
+        dim=settings.embedding_dim,
+    )
+
+
+@cache
+def get_rewriter() -> QueryRewriter:
+    from src.cache import get_redis
+
+    return QueryRewriter(get_llm_provider(), load_prompt("rewrite_system_v1"), cache=get_redis())

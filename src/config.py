@@ -1,15 +1,15 @@
-# src/config.py — la configurazione: se manca qualcosa, il progetto non parte e dice cosa
+# src/config.py - configurazione: se manca qualcosa, il progetto non parte e dice cosa
 import re
 import sys
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict, SettingsError
 
 
 class Settings(BaseSettings):
-    """La configurazione del progetto, letta dall'ambiente e dal file `.env`."""
+    """Configurazione letta dall'ambiente e dal file `.env`."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -17,23 +17,21 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     debug: bool = False
 
-    # obbligatorie, e non vuote: una riga «DATABASE_URL=» nel .env non basta a far partire.
-    # La description è quella che legge chi avvia, quando la variabile manca.
     database_url: str = Field(
         min_length=1,
         description="la stringa di connessione, postgresql+asyncpg://utente:password@host:5432/nome",
     )
     jwt_secret: str = Field(
-        min_length=32,  # HS256 vuole una chiave di almeno 256 bit
+        min_length=32,
         description="un segreto di almeno 32 caratteri: "
         'uv run python -c "import secrets; print(secrets.token_urlsafe(48))"',
     )
+    # facoltativa: vuoto = cache disattivata
+    redis_url: str = ""
 
-    # facoltative all'avvio: servono quando si chiama un modello, e la sonda dice se ci sono
     openai_api_key: str = ""
-    openai_base_url: str = ""  # vuoto = OpenAI ufficiale; valorizzato = endpoint compatibile
+    openai_base_url: str = ""
     anthropic_api_key: str = ""
-    # gli embedding: locali per default, o l'API OpenAI se il backend lo dice
     embedding_backend: Literal["local", "openai"] = "local"
     embedding_api_key: str = ""
     embedding_model: str = "intfloat/multilingual-e5-small"
@@ -43,13 +41,21 @@ class Settings(BaseSettings):
     default_model: str = "gpt-4o-mini"
     max_tokens_per_request: int = 2000
     cors_origins: list[str] = ["http://localhost:5173"]
-    daily_budget_eur: Decimal = Decimal("5.00")  # il tetto di spesa del modello, al giorno
-    soglia_approvazione_eur: Decimal = Decimal("5000")  # sopra, decide una person
+    daily_budget_eur: Decimal = Decimal("5.00")
+    soglia_approvazione_eur: Decimal = Decimal("5000")
     triage_model: str = "gpt-4o-mini"
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _jwt_non_segnaposto(cls, valore: str) -> str:
+        basso = valore.strip().lower()
+        if basso.startswith("cambiami"):
+            raise ValueError("JWT_SECRET deve essere un segreto reale, non il segnaposto")
+        return valore
 
 
 def spiega(errore: ValidationError) -> str:
-    """Da un errore di validazione al messaggio per chi avvia: quale variabile, cosa ci va, dove."""
+    """Messaggio per chi avvia: quale variabile, cosa ci va, dove."""
     righe = ["Configurazione non valida: il progetto non parte."]
     for e in errore.errors():
         campo = str(e["loc"][0])
@@ -65,11 +71,8 @@ def carica() -> Settings:
     try:
         return Settings()
     except ValidationError as e:
-        # SystemExit con un testo: il messaggio va su stderr e il processo esce con codice 1,
-        # senza un traceback che parla d'altro
         sys.exit(spiega(e))
     except SettingsError as e:
-        # un valore che non si riesce nemmeno a leggere, come una lista scritta senza JSON
         trovato = re.search(r'field "(\w+)"', str(e))
         nome = trovato.group(1).upper() if trovato else "una variabile"
         sys.exit(
@@ -79,4 +82,4 @@ def carica() -> Settings:
         )
 
 
-settings = carica()  # qui, in avvio: se manca qualcosa, il processo si ferma e dice cosa
+settings = carica()

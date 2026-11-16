@@ -46,7 +46,7 @@ class RetrievalService:
         """
     )
 
-        # le stesse query con UNA riga in più, dentro il WHERE e prima dell'ordinamento
+    # le stesse query con UNA riga in più, dentro il WHERE e prima dell'ordinamento
     SQL_PER_RUOLO = sql(
         """
         SELECT id, document_id, content,
@@ -72,8 +72,6 @@ class RetrievalService:
         """
     )
 
-
-
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
@@ -93,9 +91,7 @@ class RetrievalService:
         if livelli is None:
             righe = await self.session.execute(self.SQL, parametri)
         else:
-            righe = await self.session.execute(
-                self.SQL_PER_RUOLO, parametri | {"livelli": livelli}
-            )
+            righe = await self.session.execute(self.SQL_PER_RUOLO, parametri | {"livelli": livelli})
         return [
             RetrievalResult(
                 chunk_id=str(r.id),
@@ -170,7 +166,10 @@ class RetrievalService:
         ]
 
     async def search_lexical_strict(
-        self, query_text: str, top_k: int = 5, livelli: list[str] | None = None,
+        self,
+        query_text: str,
+        top_k: int = 5,
+        livelli: list[str] | None = None,
     ) -> list[RetrievalResult]:
         """La ricerca per parole senza OR: tutti i termini nello stesso passaggio.
 
@@ -220,9 +219,7 @@ class RetrievalService:
         # comunque, agganciata a una parola comune come "conto".
         if not vettoriali and not stretti:
             return []
-        documenti_ammessi = {r.document_id for r in vettoriali} | {
-            r.document_id for r in stretti
-        }
+        documenti_ammessi = {r.document_id for r in vettoriali} | {r.document_id for r in stretti}
         lessicali = [r for r in lessicali if r.document_id in documenti_ammessi]
 
         punteggi: dict[str, float] = {}

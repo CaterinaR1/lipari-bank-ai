@@ -42,10 +42,9 @@ def modelli_finti() -> Iterator[None]:
     a parole chiave, gli embedding sono finti ma coerenti. E chi chiede è Marco, operatore,
     senza token: i test di autenticazione rimettono il vero. Un test che vuole un modello
     preciso, o un altro utente, mette il suo."""
-    from src.api.advice import get_rewriter
     from src.api.categorize import get_categorize_service
     from src.auth.deps import get_current_user
-    from src.llm.factory import get_embedder, get_llm_provider
+    from src.llm.factory import get_embedder, get_llm_provider, get_rewriter
     from src.main import app
     from tests.finti import (
         MARCO,

@@ -594,3 +594,27 @@ uv run pytest --cov=src
 ### Soglie e limiti
 - Soglie iniziali runner: `categorize=0.80`, `advice=0.70`, `traiettorie=0.80` (da tarare con due run live consecutivi sotto rumore osservato; non misurato qui senza esecuzione live).
 - `evals.runner`/`evals.ingest_fixtures` richiedono `OPENAI_API_KEY`, modello/embedding raggiungibili e DB con corpus/seed coerente.
+
+## Giorno 10 - packaging, containerizzazione e cache
+
+### Setup (clone pulito) e avvio stack
+- cp .env.example .env e impostare JWT_SECRET reale (>=32 char, no placeholder cambiami...), OPENAI_*/ANTHROPIC_* se servono modelli/embedding esterni, POSTGRES_PASSWORD se diverso da default compose.
+- docker compose up --build -d (servizi: db pgvector, cache redis LRU no-persist, migrate, seed idempotente, pi gunicorn/uvicorn).
+- Verifica: curl -fsS http://localhost:8000/health e curl -fsS http://localhost:8000/ready (200 con controlli database/cache; DB ko => 503, cache ko/degradata => non bloccante).
+- Smoke end-to-end: ash scripts/smoke.sh (o COMPOSE="docker compose" BASE_URL=http://localhost:8000 bash scripts/smoke.sh).
+
+### Sonde / limiti
+- Limite rate advisor: 15/minute per utente (slowapi, storage Redis se REDIS_URL impostato, fallback in-memory).
+- Cache Redis opzionale (REDIS_URL vuoto => disattivata): embedding cache + cache risposta advisor (leva 2) con fallback best-effort.
+- Limiti noti: readiness non prova modello/embedding esterni; seed/ingest documentale dipende da configurazione embedding; metriche tetti/eval live richiedono stack+provider attivi.
+
+### Cache (leva 2, obiettivo tempo)
+- Cosa: cache risposta advisor per chiave uolo + visibilita effettiva + domanda normalizzata + prompt/versione (TTL), cache_hit in log/fasi; invalidazione best-effort dvice:* su ingest.
+- Perche tempo: riduce latenza/costo su domande ripetute evitando retrieve+LLM quando possibile; prima/dopo e degrado vanno misurati con cache calda/fredda.
+
+### Numeri prima/dopo (tetti) e scarti
+- docs/tetti_partenza.json: **non misurato** in questa sessione (nessuno stack live con provider/DB seedati disponibili per misura ripetibile). Generazione prevista: python -m scripts.misura_tetti --salva.
+- Bench cache calda/fredda: **non misurato** (richiede API+Redis+modelli). Comando: python -m scripts.bench_cache.
+- Scarti noti: pytest -q 140 passed, 2 warning (akeredis setex deprecation); uff check . OK dopo fix mirati; uff format --check su repo completo **crash** annotator ruff (Annotation range ... beyond end of buffer) anche dopo uff format su subset/src+tests; mypy src tests evals scripts liparibank_mcp OK (1 ignore mirato in test fake); docker compose config OK; docker build tentato ma non completato/validato end-to-end in questo ambiente (Dockerfile corretto per usare base uv:python3.12-bookworm-slim), scripts/smoke.sh ed evals.runner live non eseguiti (servono stack/chiavi).
+- Decisione tempo/costo: leva 2 scelta per ridurre p95/costo su ripetizioni; accettare possibile staleness entro TTL/invalidazione best-effort (documentato in docs/ai-review/G10.md).
+

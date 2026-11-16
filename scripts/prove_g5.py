@@ -38,16 +38,12 @@ async def conta(document_id: str) -> int:
 
 async def ingerisci(document_id: str, testo: str, embedder: Embedder) -> int:
     async with AsyncSessionLocal() as session:
-        return await IngestService(session, embedder).ingest(
-            document_id, testo, {"fonte": "prova"}
-        )
+        return await IngestService(session, embedder).ingest(document_id, testo, {"fonte": "prova"})
 
 
 async def rimuovi(document_id: str) -> None:
     async with AsyncSessionLocal() as session:
-        await session.execute(
-            delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
-        )
+        await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
         await session.commit()
 
 
@@ -90,8 +86,10 @@ async def _prove() -> None:
         coppie = [(c.document_id, c.excerpt) for c in doppia.citations]
         ok = primo == secondo and len(coppie) == len(set(coppie)) and bool(coppie)
         esiti.append(("2. doppio ingest → citazioni non duplicate", ok))
-        print(f"[{'PASS' if ok else 'FAIL'}] doppio ingest: {primo} -> {secondo}, "
-              f"{len(coppie)} citazioni, {len(set(coppie))} distinte")
+        print(
+            f"[{'PASS' if ok else 'FAIL'}] doppio ingest: {primo} -> {secondo}, "
+            f"{len(coppie)} citazioni, {len(set(coppie))} distinte"
+        )
 
         # 3. pagina ripetuta: nessuna citazione identica
         try:
@@ -101,8 +99,10 @@ async def _prove() -> None:
             coppie = [(c.document_id, c.excerpt) for c in ripetuta.citations]
             ok = una == due and len(coppie) == len(set(coppie)) and bool(coppie)
             esiti.append(("3. pagina ripetuta → nessuna citazione identica", ok))
-            print(f"[{'PASS' if ok else 'FAIL'}] pagina ripetuta: {una} -> {due}, "
-                  f"{len(coppie)} citazioni: {ripetuta.answer[:90]!r}")
+            print(
+                f"[{'PASS' if ok else 'FAIL'}] pagina ripetuta: {una} -> {due}, "
+                f"{len(coppie)} citazioni: {ripetuta.answer[:90]!r}"
+            )
         finally:
             await rimuovi("pagina_ripetuta")
 

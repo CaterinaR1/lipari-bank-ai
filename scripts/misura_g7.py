@@ -24,9 +24,7 @@ async def login(client: httpx.AsyncClient, username: str, password: str) -> str:
     return str(risposta.json()["access_token"])
 
 
-async def misura(
-    base_url: str, limite: int, file: Path, username: str, password: str
-) -> int:
+async def misura(base_url: str, limite: int, file: Path, username: str, password: str) -> int:
     testo = await asyncio.to_thread(file.read_text, encoding="utf-8")
     domande: list[dict[str, Any]] = [
         json.loads(riga) for riga in testo.splitlines() if riga.strip()
@@ -80,9 +78,7 @@ def main() -> int:
     parser.add_argument("--username", default="mbianchi")
     parser.add_argument("--password", default="bootcamp")
     args = parser.parse_args()
-    return asyncio.run(
-        misura(args.base_url, args.limite, args.file, args.username, args.password)
-    )
+    return asyncio.run(misura(args.base_url, args.limite, args.file, args.username, args.password))
 
 
 if __name__ == "__main__":
